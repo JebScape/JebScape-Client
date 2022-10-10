@@ -14,6 +14,6 @@ public interface JebScapeConfig extends Config
 	)
 	default String greeting()
 	{
-		return "Hello";
+		return "powered by JebScape";
 	}
 }
