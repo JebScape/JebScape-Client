@@ -28,12 +28,20 @@ public class JebScapeActor
 	private int animationStall; // stalls movement animations while playing certain primary animations
 	
 	
-	final int JAU_DIRECTIONS_5X5[][] = {{768,	768,	1024,	1280,	1280},
+	private static final int BLOCKING_DIRECTIONS_5x5[][] = {
+			{CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_EAST,	CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_EAST,	CollisionDataFlag.BLOCK_MOVEMENT_SOUTH,	CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_WEST,	CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_WEST},
+			{CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_EAST,	CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_EAST,	CollisionDataFlag.BLOCK_MOVEMENT_SOUTH,	CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_WEST,	CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_WEST},
+			{CollisionDataFlag.BLOCK_MOVEMENT_EAST,			CollisionDataFlag.BLOCK_MOVEMENT_EAST,			0,										CollisionDataFlag.BLOCK_MOVEMENT_WEST,			CollisionDataFlag.BLOCK_MOVEMENT_WEST},
+			{CollisionDataFlag.BLOCK_MOVEMENT_NORTH_EAST,	CollisionDataFlag.BLOCK_MOVEMENT_NORTH_EAST,	CollisionDataFlag.BLOCK_MOVEMENT_NORTH,	CollisionDataFlag.BLOCK_MOVEMENT_NORTH_WEST,	CollisionDataFlag.BLOCK_MOVEMENT_NORTH_WEST},
+			{CollisionDataFlag.BLOCK_MOVEMENT_NORTH_EAST,	CollisionDataFlag.BLOCK_MOVEMENT_NORTH_EAST,	CollisionDataFlag.BLOCK_MOVEMENT_NORTH,	CollisionDataFlag.BLOCK_MOVEMENT_NORTH_WEST,	CollisionDataFlag.BLOCK_MOVEMENT_NORTH_WEST}};
+	
+	private static final int JAU_DIRECTIONS_5X5[][] = {
+			{768,	768,	1024,	1280,	1280},
 			{768,	768,	1024,	1280,	1280},
 			{512,	512,	0,		1536,	1536},
 			{256,	256,	0,		1792,	1792},
 			{256,	256,	0,		1792,	1792}};
-	final int CENTER_DIRECTION_INDEX = 2;
+	private static final int CENTER_INDEX_5X5 = 2;
 	
 	private enum POSE_ANIM
 	{
@@ -105,9 +113,9 @@ public class JebScapeActor
 	// int jauOrientation is not used if isInteracting is false; it will instead default to the angle being moved towards
 	// int primaryAnimationID will not be used if -1; the previously set movement poses will be used instead
 	// TODO: possible addition of stall animation variable
-	public void moveTo(WorldPoint position, int jauOrientation, int primaryAnimationID, boolean isInteracting)
+	public void moveTo(WorldPoint worldPosition, int jauOrientation, int primaryAnimationID, boolean isInteracting)
 	{
-		if (!position.isInScene(client) || position.getPlane() != client.getPlane() || jauOrientation < 0)
+		if (!worldPosition.isInScene(client) || worldPosition.getPlane() != client.getPlane() || jauOrientation < 0)
 			return;
 		
 		// just clear the queue and move immediately to the destination if many ticks behind
@@ -116,103 +124,88 @@ public class JebScapeActor
 		
 		int prevTargetIndex = (currentTargetIndex + targetQueueSize - 1) % MAX_TARGET_QUEUE_SIZE;
 		int newTargetIndex = (currentTargetIndex + targetQueueSize) % MAX_TARGET_QUEUE_SIZE;
+		LocalPoint localPosition = LocalPoint.fromWorld(client, worldPosition);
 		
 		// use current position if nothing is in queue
-		LocalPoint prevLocalPosition;
 		WorldPoint prevWorldPosition;
 		if (targetQueueSize++ > 0)
-		{
-			prevLocalPosition = targetQueue[prevTargetIndex].localDestinationPosition;
 			prevWorldPosition = targetQueue[prevTargetIndex].worldDestinationPosition;
-		}
 		else
-		{
-			prevLocalPosition = rlObject.getLocation();
-			prevWorldPosition = WorldPoint.fromLocal(client, prevLocalPosition);
-		}
+			prevWorldPosition = WorldPoint.fromLocal(client, rlObject.getLocation());
 		
-		int distance = prevWorldPosition.distanceTo(position);
+		int distance = prevWorldPosition.distanceTo(worldPosition);
 		if (distance == Integer.MAX_VALUE || distance > 2)
 			distance = 0;
 		
 		if (distance > 0)
 		{
-			int[][] colliders = client.getCollisionMaps()[prevWorldPosition.getPlane()].getFlags();
-			int colliderFlag = colliders[prevLocalPosition.getSceneX()][prevLocalPosition.getSceneY()];
-			int dx = position.getX() - prevWorldPosition.getX();
-			int dy = position.getY() - prevWorldPosition.getY();
+			int dx = worldPosition.getX() - prevWorldPosition.getX();
+			int dy = worldPosition.getY() - prevWorldPosition.getY();
 			
 			boolean useMidPointTile = false;
+			
 			if (distance == 1 && dx != 0 && dy != 0) // test for blockage along diagonal
 			{
 				// if blocked diagonally, go around in an L shape (2 options)
-				int colliderToTest = -1;
-				if (dx == -1 && dy == -1)
-					colliderToTest = CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_WEST;
-				else if (dx == -1 && dy == 1)
-					colliderToTest = CollisionDataFlag.BLOCK_MOVEMENT_NORTH_WEST;
-				else if (dx == 1 && dy == 1)
-					colliderToTest = CollisionDataFlag.BLOCK_MOVEMENT_NORTH_EAST;
-				else if (dx == 1 && dy == -1)
-					colliderToTest = CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_EAST;
-				else
-					client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Error with collision detection. (1)", null);
+				int[][] colliders = client.getCollisionMaps()[worldPosition.getPlane()].getFlags();
+				final int diagonalTest = BLOCKING_DIRECTIONS_5x5[CENTER_INDEX_5X5 - dy][CENTER_INDEX_5X5 + dx];
+				final int axisXTest = BLOCKING_DIRECTIONS_5x5[CENTER_INDEX_5X5][CENTER_INDEX_5X5 + dx] | BLOCKING_DIRECTIONS_5x5[CENTER_INDEX_5X5 + dy][CENTER_INDEX_5X5] | CollisionDataFlag.BLOCK_MOVEMENT_FULL;
+				final int axisYTest = BLOCKING_DIRECTIONS_5x5[CENTER_INDEX_5X5 - dy][CENTER_INDEX_5X5] | BLOCKING_DIRECTIONS_5x5[CENTER_INDEX_5X5][CENTER_INDEX_5X5 - dx] | CollisionDataFlag.BLOCK_MOVEMENT_FULL;
 				
-				if (colliderToTest != -1 && (colliderFlag & colliderToTest) != 0)
+				int diagonalFlag = colliders[localPosition.getSceneX()][localPosition.getSceneY()];
+				int axisXFlag = colliders[localPosition.getSceneX()][localPosition.getSceneY() - dy];
+				int axisYFlag = colliders[localPosition.getSceneX() - dx][localPosition.getSceneY()];
+				
+				if ((axisXFlag & axisXTest) != 0 || (axisYFlag & axisYTest) != 0 || (diagonalFlag & diagonalTest) != 0)
 				{
+					// the path along the diagonal is blocked
 					useMidPointTile = true;
 					distance = 2; // we are now running in an L shape
 					
-					// now that we've established it's blocked, let's test the priority paths (West > East > South > North)
-					// if blocked, we will just accept that the untested side works... if it doesn't, then something glitched, but alas!
-					if ((colliderToTest == CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_WEST && (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_WEST) != 0) ||
-							(colliderToTest == CollisionDataFlag.BLOCK_MOVEMENT_NORTH_WEST && (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_WEST) != 0) ||
-							(colliderToTest == CollisionDataFlag.BLOCK_MOVEMENT_NORTH_EAST && (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_EAST) != 0) ||
-							(colliderToTest == CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_EAST && (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_EAST) != 0))
-						dx = 0;
-					else
+					// if the priority East-West path is clear, we'll default to this direction
+					if ((axisXFlag & axisXTest) == 0)
 						dy = 0;
+					else
+						dx = 0;
 				}
 			}
-			else if (distance == 2 && Math.abs(dy - dx) == 1) // test for blockage along knight-style moves
+			else if (distance == 2 && Math.abs(Math.abs(dy) - Math.abs(dx)) == 1) // test for blockage along knight-style moves
 			{
 				useMidPointTile = true; // we will always need a midpoint for these types of moves
+				int[][] colliders = client.getCollisionMaps()[worldPosition.getPlane()].getFlags();
+				final int diagonalTest = BLOCKING_DIRECTIONS_5x5[CENTER_INDEX_5X5 - dy][CENTER_INDEX_5X5 + dx];
+				final int axisXTest = BLOCKING_DIRECTIONS_5x5[CENTER_INDEX_5X5][CENTER_INDEX_5X5 + dx] | BLOCKING_DIRECTIONS_5x5[CENTER_INDEX_5X5 + dy][CENTER_INDEX_5X5] | CollisionDataFlag.BLOCK_MOVEMENT_FULL;
+				final int axisYTest = BLOCKING_DIRECTIONS_5x5[CENTER_INDEX_5X5 - dy][CENTER_INDEX_5X5] | BLOCKING_DIRECTIONS_5x5[CENTER_INDEX_5X5][CENTER_INDEX_5X5 - dx] | CollisionDataFlag.BLOCK_MOVEMENT_FULL;
+				
+				int dxSign = Integer.signum(dx);
+				int dySign = Integer.signum(dy);
+				int diagonalFlag = colliders[localPosition.getSceneX()][localPosition.getSceneY()];
+				int axisXFlag = colliders[localPosition.getSceneX()][localPosition.getSceneY() - Integer.signum(dySign)];
+				int axisYFlag = colliders[localPosition.getSceneX() - Integer.signum(dxSign)][localPosition.getSceneY()];
 				
 				// do we go straight or diagonal? test straight first and fall back to diagonal if it fails
 				// priority is West > East > South > North > Southwest > Southeast > Northwest > Northeast
-				int colliderToTest = -1;
-				if (dx == -2)
-					colliderToTest = CollisionDataFlag.BLOCK_MOVEMENT_WEST;
-				else if (dx == 2)
-					colliderToTest = CollisionDataFlag.BLOCK_MOVEMENT_EAST;
-				else if (dy == -2)
-					colliderToTest = CollisionDataFlag.BLOCK_MOVEMENT_SOUTH;
-				else if (dy == 2)
-					colliderToTest = CollisionDataFlag.BLOCK_MOVEMENT_NORTH;
-				else
-					client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Error with collision detection. (2)", null);
-				
-				if (colliderToTest != -1 && (colliderFlag & colliderToTest) != 0)
-				{
-					// we've established that the cardinal direction is blocked, so let's go along the diagonal
-					if (Math.abs(dx) == 2)
-						dx /= 2;
-					else
-						dy /= 2;
-				}
-				else
+				if ((axisXFlag & axisXTest) == 0 && (axisYFlag & axisYTest) == 0 && (diagonalFlag & diagonalTest) == 0)
 				{
 					// the cardinal direction is clear (or we glitched), so let's go straight
 					if (Math.abs(dx) == 2)
 					{
-						dx /= 2;
+						dx = dxSign;
 						dy = 0;
 					}
 					else
 					{
 						dx = 0;
-						dy /= 2;
+						dy = dySign;
 					}
+				}
+				else
+				{
+					// we've established that the cardinal direction is blocked, so let's go along the diagonal
+					if (Math.abs(dx) == 2)
+						dx = dxSign;
+					else
+						dy = dySign;
 				}
 			}
 			
@@ -227,7 +220,7 @@ public class JebScapeActor
 					// the distance between these points should be guaranteed to be 1 here
 					dx = midPoint.getX() - prevWorldPosition.getX();
 					dy = midPoint.getY() - prevWorldPosition.getY();
-					jauOrientation = JAU_DIRECTIONS_5X5[CENTER_DIRECTION_INDEX - dy][CENTER_DIRECTION_INDEX + dx];
+					jauOrientation = JAU_DIRECTIONS_5X5[CENTER_INDEX_5X5 - dy][CENTER_INDEX_5X5 + dx];
 				}
 				
 				this.targetQueue[newTargetIndex].worldDestinationPosition = midPoint;
@@ -247,14 +240,14 @@ public class JebScapeActor
 			{
 				// the actor needs to look in the direction being moved toward
 				// the distance between these points may be up to 2
-				dx = position.getX() - prevWorldPosition.getX();
-				dy = position.getY() - prevWorldPosition.getY();
-				jauOrientation = JAU_DIRECTIONS_5X5[CENTER_DIRECTION_INDEX - dy][CENTER_DIRECTION_INDEX + dx];
+				dx = worldPosition.getX() - prevWorldPosition.getX();
+				dy = worldPosition.getY() - prevWorldPosition.getY();
+				jauOrientation = JAU_DIRECTIONS_5X5[CENTER_INDEX_5X5 - dy][CENTER_INDEX_5X5 + dx];
 			}
 		}
 		
-		this.targetQueue[newTargetIndex].worldDestinationPosition = position;
-		this.targetQueue[newTargetIndex].localDestinationPosition = LocalPoint.fromWorld(client, position);
+		this.targetQueue[newTargetIndex].worldDestinationPosition = worldPosition;
+		this.targetQueue[newTargetIndex].localDestinationPosition = localPosition;
 		this.targetQueue[newTargetIndex].tileMovementSpeed = distance; // can only be idle/tele (0), walk (1), or run (2)
 		this.targetQueue[newTargetIndex].jauDestinationOrientation = jauOrientation;
 		this.targetQueue[newTargetIndex].primaryAnimationID = primaryAnimationID;
@@ -323,9 +316,11 @@ public class JebScapeActor
 					{
 						// compute the number of local points to move this tick
 						int speed = currentMovementSpeed * movementPerClientTick;
-						if (Math.abs(dx) >= speed)
+						
+						// only use the delta if it won't send up past the target
+						if (Math.abs(dx) > speed)
 							dx = Integer.signum(dx) * speed;
-						if (Math.abs(dy) >= speed)
+						if (Math.abs(dy) > speed)
 							dy = Integer.signum(dy) * speed;
 						
 						LocalPoint newLocation = new LocalPoint(currentPosition.getX() + dx, currentPosition.getY() + dy);
@@ -335,11 +330,20 @@ public class JebScapeActor
 						final int JAU_FULL_ROTATION = 2048;
 						final int JAU_HALF_ROTATION = 1024;
 						final int JAU_TURN_SPEED = 32;
+						
 						int dJau = (targetOrientation - currentOrientation) % JAU_FULL_ROTATION;
-						if (Math.abs(dJau) >= JAU_TURN_SPEED)
+						int dJauCW = Math.abs(dJau);
+						
+						if (dJauCW > JAU_HALF_ROTATION) // use the shortest turn
+							dJau = (currentOrientation - targetOrientation) % JAU_FULL_ROTATION;
+						else if (dJauCW == JAU_HALF_ROTATION) // always turn right when turning around
+							dJau = dJauCW;
+						
+						// only use the delta if it won't send up past the target
+						if (Math.abs(dJau) > JAU_TURN_SPEED)
 							dJau = Integer.signum(dJau) * JAU_TURN_SPEED;
 						
-						int newOrientation = (rlObject.getOrientation() + dJau) % JAU_FULL_ROTATION;
+						int newOrientation = (JAU_FULL_ROTATION + rlObject.getOrientation() + dJau) % JAU_FULL_ROTATION;
 						rlObject.setOrientation(newOrientation);
 					}
 					
@@ -362,6 +366,24 @@ public class JebScapeActor
 	public void printDebug()
 	{
 		//client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Integer.toString(currentTargetIndex) + " " + Integer.toString(targetQueueSize) + " " + Integer.toString(targetQueue[currentTargetIndex].primaryAnimationID), null);
-		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Integer.toString(rlObject.getOrientation()), null);//.getX()) + ", " + rlObject.getLocation().getY(), null);
+		//client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Integer.toString(rlObject.getOrientation()), null);//.getX()) + ", " + rlObject.getLocation().getY(), null);
+		
+		
+		int[][] colliders = client.getCollisionMaps()[client.getPlane()].getFlags();
+		int colliderFlag = colliders[rlObject.getLocation().getSceneX()][rlObject.getLocation().getSceneY()];
+		//int colliderFlag = colliders[client.getLocalPlayer().getLocalLocation().getSceneX()][client.getLocalPlayer().getLocalLocation().getSceneY()];
+		String text = "NW: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_NORTH_WEST);
+		text += " N: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_NORTH);
+		text += " NE: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_NORTH_EAST);
+		text += " W: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_WEST);
+		text += " E: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_EAST);
+		text += " SW: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_WEST);
+		text += " S: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_SOUTH);
+		text += " SE: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_SOUTH_EAST);
+		text += " Obj: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_OBJECT);
+		text += " Fl: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_FLOOR);
+		text += " FlD: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_FLOOR_DECORATION);
+		text += " Full: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_FULL);
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", text, null);//.getX()) + ", " + rlObject.getLocation().getY(), null);
 	}
 }
