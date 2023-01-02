@@ -267,6 +267,7 @@ public class JebScapeActor
 				int currentOrientation = rlObject.getOrientation();
 				int dx = targetPosition.getX() - currentPosition.getX();
 				int dy = targetPosition.getY() - currentPosition.getY();
+				boolean isInteracting = targetQueue[currentTargetIndex].isInteracting;
 				
 				// check if current speed and animation are correct
 				if (currentMovementSpeed != targetQueue[currentTargetIndex].tileMovementSpeed)
@@ -279,6 +280,7 @@ public class JebScapeActor
 						rlObject.setShouldLoop(true);
 					}
 				}
+				/*
 				//test
 				if (targetQueue[currentTargetIndex].primaryAnimationID != -1)
 				{
@@ -294,9 +296,9 @@ public class JebScapeActor
 						rlObject.setShouldLoop(true);
 					}
 				}
-				
+				*/
 				// are we not where we need to be?
-				if (dx != 0 || dy != 0)
+				if (dx != 0 || dy != 0 || isInteracting)
 				{
 					// continue moving until we reach target
 					int movementPerClientTick = 4;
@@ -325,26 +327,6 @@ public class JebScapeActor
 						
 						LocalPoint newLocation = new LocalPoint(currentPosition.getX() + dx, currentPosition.getY() + dy);
 						rlObject.setLocation(newLocation, targetQueue[currentTargetIndex].worldDestinationPosition.getPlane());
-						
-						// compute the turn we need to make
-						final int JAU_FULL_ROTATION = 2048;
-						final int JAU_HALF_ROTATION = 1024;
-						final int JAU_TURN_SPEED = 32;
-						
-						int dJau = (targetOrientation - currentOrientation) % JAU_FULL_ROTATION;
-						int dJauCW = Math.abs(dJau);
-						
-						if (dJauCW > JAU_HALF_ROTATION) // use the shortest turn
-							dJau = (currentOrientation - targetOrientation) % JAU_FULL_ROTATION;
-						else if (dJauCW == JAU_HALF_ROTATION) // always turn right when turning around
-							dJau = dJauCW;
-						
-						// only use the delta if it won't send up past the target
-						if (Math.abs(dJau) > JAU_TURN_SPEED)
-							dJau = Integer.signum(dJau) * JAU_TURN_SPEED;
-						
-						int newOrientation = (JAU_FULL_ROTATION + rlObject.getOrientation() + dJau) % JAU_FULL_ROTATION;
-						rlObject.setOrientation(newOrientation);
 					}
 					
 					currentPosition = rlObject.getLocation();
@@ -352,8 +334,32 @@ public class JebScapeActor
 					dy = targetPosition.getY() - currentPosition.getY();
 				}
 				
-				// have we arrived at our destination? let's ignore orientation for now
-				if (dx == 0 && dy == 0)
+				// compute the turn we need to make
+				final int JAU_FULL_ROTATION = 2048;
+				int dJau = (targetOrientation - currentOrientation) % JAU_FULL_ROTATION;
+				
+				if (dJau != 0)
+				{
+					final int JAU_HALF_ROTATION = 1024;
+					final int JAU_TURN_SPEED = 32;
+					int dJauCW = Math.abs(dJau);
+					
+					if (dJauCW > JAU_HALF_ROTATION) // use the shortest turn
+						dJau = (currentOrientation - targetOrientation) % JAU_FULL_ROTATION;
+					else if (dJauCW == JAU_HALF_ROTATION) // always turn right when turning around
+						dJau = dJauCW;
+					
+					// only use the delta if it won't send up past the target
+					if (Math.abs(dJau) > JAU_TURN_SPEED)
+						dJau = Integer.signum(dJau) * JAU_TURN_SPEED;
+					
+					int newOrientation = (JAU_FULL_ROTATION + rlObject.getOrientation() + dJau) % JAU_FULL_ROTATION;
+					rlObject.setOrientation(newOrientation);
+					dJau = (targetOrientation - newOrientation) % JAU_FULL_ROTATION;
+				}
+				
+				// have we arrived at our target?
+				if (dx == 0 && dy == 0 && dJau == 0)
 				{
 					// if so, pull out the next target
 					currentTargetIndex = (currentTargetIndex + 1) % MAX_TARGET_QUEUE_SIZE;
@@ -368,7 +374,7 @@ public class JebScapeActor
 		//client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Integer.toString(currentTargetIndex) + " " + Integer.toString(targetQueueSize) + " " + Integer.toString(targetQueue[currentTargetIndex].primaryAnimationID), null);
 		//client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", Integer.toString(rlObject.getOrientation()), null);//.getX()) + ", " + rlObject.getLocation().getY(), null);
 		
-		
+		/*
 		int[][] colliders = client.getCollisionMaps()[client.getPlane()].getFlags();
 		int colliderFlag = colliders[rlObject.getLocation().getSceneX()][rlObject.getLocation().getSceneY()];
 		//int colliderFlag = colliders[client.getLocalPlayer().getLocalLocation().getSceneX()][client.getLocalPlayer().getLocalLocation().getSceneY()];
@@ -385,5 +391,7 @@ public class JebScapeActor
 		text += " FlD: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_FLOOR_DECORATION);
 		text += " Full: " + (colliderFlag & CollisionDataFlag.BLOCK_MOVEMENT_FULL);
 		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", text, null);//.getX()) + ", " + rlObject.getLocation().getY(), null);
+		
+		 */
 	}
 }
