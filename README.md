@@ -1,2 +1,29 @@
 # JebScape
-JebScape Client
+This is a work in progress (WIP) for an upcoming modding platform for OSRS, inspired by the Roblox and Minecraft modding communities. The hope is to enable the creation of custom playable content in the live game, such as new maps, skills, quests, and minigames by leveraging the RuneLite API to change what is drawn on screen. It is powered by a high performance server built from scratch very close to the metal for modern CPUs that is being designed to support up to 131k concurrent active users in real-time without server lag.
+
+Note: This is *NOT* a RSPS. This does not interface with Jagex's patented protocol. You also remain logged into Jagex's servers at all times.
+
+As a WIP, a number of systems remain experimental. This is being published to begin public stress tests. Expect many broken features. Each of the following planned features are designed to iteratively add and test new features until the final deliverable is ready. Community contributions are appreciated and welcomed.
+
+Current Experimental Mods:
+- Megaserver Mod (cross-world play with others on other worlds)
+
+Future Planned Mods:
+- Live Hiscores Mod (see ranks change instantly; enables post-200m training)
+- Playgrounds Mod (place objects in the same world as others)
+- Speedrunning Mod (race against the ghosts of past player speedrun records)
+- Prop Hunt Mod (rightclick object, become object)
+- Tag Mod (chase each other around a custom arena map)
+- JebChess Mod (real-time chess remake)
+- Sailing Skill Mod (train your own skill)
+- Player-Made Worlds Editor Mod (create your own custom mods)
+- Player-Made Worlds Mod (play others' creations)
+
+
+Join Our Discord: https://discord.gg/TutGntk5Wr
+
+Donate on Patreon: https://www.patreon.com/jebscape
+
+View our Source: http://www.jebscape.com
+
+-Jebrim

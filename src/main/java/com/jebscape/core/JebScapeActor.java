@@ -25,7 +25,6 @@ public class JebScapeActor
 	private int currentTargetIndex;
 	private int targetQueueSize;
 	
-	private int currentPlane;
 	private int currentMovementSpeed;
 	private int currentAnimationID;
 	private int animationStall; // stalls movement animations while playing certain primary animations
@@ -74,12 +73,15 @@ public class JebScapeActor
 	
 	public void spawn(WorldPoint position, int jauOrientation)
 	{
-		rlObject.setLocation(LocalPoint.fromWorld(client, position), position.getPlane());
+		LocalPoint localPosition = LocalPoint.fromWorld(client, position);
+		if (localPosition != null && client.getPlane() == position.getPlane())
+			rlObject.setLocation(localPosition, position.getPlane());
+		else
+			rlObject.setLocation(new LocalPoint(0, 0), client.getPlane());
 		rlObject.setOrientation(jauOrientation);
 		rlObject.setAnimation(null);
 		rlObject.setShouldLoop(true);
 		rlObject.setActive(true);
-		this.currentPlane =	position.getPlane();
 		this.currentAnimationID = -1;
 		this.currentMovementSpeed = 0;
 		this.currentTargetIndex = 0;
@@ -89,7 +91,6 @@ public class JebScapeActor
 	public void despawn()
 	{
 		rlObject.setActive(false);
-		this.currentPlane = -1;
 		this.currentAnimationID = -1;
 		this.currentMovementSpeed = 0;
 		this.currentTargetIndex = 0;
@@ -132,12 +133,20 @@ public class JebScapeActor
 		int newTargetIndex = (currentTargetIndex + targetQueueSize) % MAX_TARGET_QUEUE_SIZE;
 		LocalPoint localPosition = LocalPoint.fromWorld(client, worldPosition);
 		
+		if (localPosition == null)
+			return;
+		
 		// use current position if nothing is in queue
 		WorldPoint prevWorldPosition;
 		if (targetQueueSize++ > 0)
+		{
 			prevWorldPosition = targetQueue[prevTargetIndex].worldDestinationPosition;
+			// TODO: check if a different primaryAnimationID exists; if so, modify the old one with our new one (hopefully this prevents the extra tick of animation repeating)
+		}
 		else
+		{
 			prevWorldPosition = WorldPoint.fromLocal(client, rlObject.getLocation());
+		}
 		
 		int distance = prevWorldPosition.distanceTo(worldPosition);
 		if (distance > 0 && distance <= 2)
@@ -214,7 +223,7 @@ public class JebScapeActor
 			
 			if (useMidPointTile)
 			{
-				WorldPoint midPoint = prevWorldPosition.dx(dx).dy(dy);
+				WorldPoint midPoint = new WorldPoint(prevWorldPosition.getX() + dx, prevWorldPosition.getY() + dy, prevWorldPosition.getPlane());
 				
 				// handle rotation if we have no interacting target
 				if (!isInteracting)
@@ -271,7 +280,7 @@ public class JebScapeActor
 				LocalPoint targetPosition = targetQueue[currentTargetIndex].localDestinationPosition;
 				int targetOrientation = targetQueue[currentTargetIndex].jauDestinationOrientation;
 				
-				if (client.getPlane() != currentPlane || !targetPosition.isInScene() || targetOrientation < 0)
+				if (client.getPlane() != targetPlane || targetPosition == null || !targetPosition.isInScene() || targetOrientation < 0)
 				{
 					// this actor is no longer in a visible area on our client, so let's despawn it
 					despawn();
@@ -290,11 +299,10 @@ public class JebScapeActor
 				{
 					int speed = targetQueue[currentTargetIndex].tileMovementSpeed;
 					// we don't want to go beyond run (speed of 2)
-					rlObject.setAnimation(animationPoses[speed > 2 ? null : speed]);
+					rlObject.setAnimation(speed > 2 ? null : animationPoses[speed]);
 					this.currentAnimationID = -1;
 				}
 				
-				this.currentPlane =	targetPlane;
 				this.currentMovementSpeed = targetQueue[currentTargetIndex].tileMovementSpeed;
 				
 				LocalPoint currentPosition = rlObject.getLocation();
@@ -334,7 +342,7 @@ public class JebScapeActor
 						}
 						
 						LocalPoint newLocation = new LocalPoint(currentPosition.getX() + dx, currentPosition.getY() + dy);
-						rlObject.setLocation(newLocation, targetQueue[currentTargetIndex].worldDestinationPosition.getPlane());
+						rlObject.setLocation(newLocation, targetPlane);
 					}
 					
 					currentPosition = rlObject.getLocation();
