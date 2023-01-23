@@ -1,4 +1,4 @@
-package com.jebscape.megaserver;
+package com.jebscape.core;
 
 import net.runelite.api.*;
 import net.runelite.api.coords.*;

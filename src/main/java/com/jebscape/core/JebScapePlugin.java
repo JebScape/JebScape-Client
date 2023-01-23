@@ -12,9 +12,6 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 
-import static net.runelite.api.NpcID.GHOST_3516;
-import static net.runelite.api.coords.LocalPoint.fromWorld;
-
 @Slf4j
 @PluginDescriptor(
 	name = "JebScape"

@@ -17,7 +17,7 @@ public class MegaserverMod
 	private Model ghostModel;
 	private WorldPoint currentServerPosition;
 	private boolean renderablesLoaded = false;
-	private com.jebscape.megaserver.JebScapeActor[] ghosts = new com.jebscape.megaserver.JebScapeActor[MAX_GHOSTS];
+	private JebScapeActor[] ghosts = new JebScapeActor[MAX_GHOSTS];
 	
 	
 	
@@ -28,7 +28,7 @@ public class MegaserverMod
 		
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
-			ghosts[i] = new com.jebscape.megaserver.JebScapeActor();
+			ghosts[i] = new JebScapeActor();
 			ghosts[i].init(client);
 		}
 	}
@@ -154,7 +154,7 @@ public class MegaserverMod
 								{
 									// not despawned, so let's extract the full data
 									// 5 bits dx
-									// 5 bits dx
+									// 5 bits dy
 									// 6 bits packedOrientation
 									// 14 bits animationID
 									// 1 bit isInteracting
