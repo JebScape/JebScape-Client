@@ -133,15 +133,15 @@ public class JebScapeConnection
 		
 		// set the header
 		// 2 bits login identifier
-		// 9 bits last known game session id
+		// 17 bits last known game session id
 		// 1 bit isUsingKey (if false, will log in as guest only)
-		// 10 bits protocol version
-		// 10 bits reserved
+		// 8 bits protocol version
+		// 4 bits reserved
 		int loginPacketHeader = LOGIN_PACKET & 0x3;					// 2/32 bits
-		loginPacketHeader |= (gameSessionID & 0x1FF) << 2;			// 11/32 bits
-		loginPacketHeader |= (isUsingKey ? 0x1 : 0x0) << 11;		// 12/32 bits
-		loginPacketHeader |= (PROTOCOL_VERSION & 0x3FF) << 12;		// 22/32 bits
-		loginPacketHeader |= (0x3FF & 0x3FF) << 22;					// 32/32 bits
+		loginPacketHeader |= (gameSessionID & 0x1FFFF) << 2;		// 19/32 bits
+		loginPacketHeader |= (isUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
+		loginPacketHeader |= (PROTOCOL_VERSION & 0xFF) << 20;		// 28/32 bits
+		loginPacketHeader |= 0xF << 28;								// 32/32 bits
 		
 		byte[] nameBytes = accountName.getBytes();
 		int strLen = accountName.length();
