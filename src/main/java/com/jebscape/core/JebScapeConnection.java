@@ -234,15 +234,15 @@ public class JebScapeConnection
 		
 		// set the header
 		// 2 bits game identifier
-		// 9 bits last known game session id
+		// 17 bits last known game session id
 		// 1 bit isUsingKey
 		// 4 bits current tick
-		// 16 bits bitflag per received packet from the previous tick
-		int gamePacketHeader = GAME_PACKET & 0x3;						// 2/32 bits
-		gamePacketHeader |= (gameSessionID & 0x1FF) << 2;				// 11/32 bits
-		gamePacketHeader |= (isUsingKey ? 0x1 : 0x0) << 11;				// 12/32 bits
-		gamePacketHeader |= (currentGameTick & 0xF) << 12;				// 16/32 bits
-		gamePacketHeader |= (gameServerPacketsReceived & 0xFFFF) << 16;	// 32/32 bits
+		// 8 bits reserved
+		int gamePacketHeader = GAME_PACKET & 0x3;				// 2/32 bits
+		gamePacketHeader |= (gameSessionID & 0x1FFFF) << 2;		// 19/32 bits
+		gamePacketHeader |= (isUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
+		gamePacketHeader |= (currentGameTick & 0xF) << 20;		// 24/32 bits
+		gamePacketHeader |= 0xFF << 24;							// 32/32 bits
 		
 		int reserved = 0xFFFFFFFF;
 		
@@ -304,19 +304,17 @@ public class JebScapeConnection
 					
 					// validate packet header (similar schema as game packet)
 					// 2 bits type identifier
-					// 9 bits session id
+					// 17 bits session id
 					// 1 bit isUsingKey; logged in (0) as guest w/o key or (1) as secured account w/ key
 					// 4 bits current tick
 					// 4 bits number of packets sent this tick
 					// 4 bits packet id
-					// 8 bits tick execution time
 					int newPacketType = packetHeader & 0x3;							// 2/32 bits
-					int newSessionID = (packetHeader >>> 2) & 0x1FF;				// 11/32 bits
-					boolean newIsUsingKey = ((packetHeader >>> 11) & 0x1) == 0x1;	// 12/32 bits
-					int newTick = (packetHeader >>> 12) & 0xF;						// 16/32 bits
-					int newNumPacketsSent = (packetHeader >>> 16) & 0xF;			// 20/32 bits
-					int newPacketID = (packetHeader >>> 20) & 0xF;					// 24/32 bits
-					int newExecutionTime = (packetHeader >>> 24) & 0xFF;			// 32/32 bits
+					int newSessionID = (packetHeader >>> 2) & 0x1FFFF;				// 19/32 bits
+					boolean newIsUsingKey = ((packetHeader >>> 19) & 0x1) == 0x1;	// 20/32 bits
+					int newTick = (packetHeader >>> 20) & 0xF;						// 24/32 bits
+					int newNumPacketsSent = (packetHeader >>> 24) & 0xF;			// 28/32 bits
+					int newPacketID = (packetHeader >>> 28) & 0xF;					// 32/32 bits
 					
 					if (newPacketType == LOGIN_PACKET)
 					{
@@ -326,7 +324,6 @@ public class JebScapeConnection
 						gameSessionID = newSessionID;
 						currentGameTick = newTick;
 						lastReceivedGameTick = newTick;
-						gameServerTickExecutionTime = newExecutionTime;
 						// we're not using the remaining bytes of data, so let's just proceed with normal ticking
 					}
 					else if (isLoggedIn && newPacketType == GAME_PACKET && gameSessionID == newSessionID)
@@ -336,7 +333,6 @@ public class JebScapeConnection
 						lastReceivedGameTick = newTick;
 						gameServerData[newTick][newPacketID].setData(gameServerPacket);
 						numGameServerPacketsSent[newTick] = newNumPacketsSent;
-						gameServerTickExecutionTime = newExecutionTime; // this will only be associated with the last packet received, not necessarily the most recent tick
 					}
 				}
 			} while (bytesReceived > 0);
@@ -364,6 +360,7 @@ public class JebScapeConnection
 			}
 			
 			// let's analyze what packets are missing from the most recent game tick received
+			// TODO: not currently used; reanalyze to determine if this is necessary
 			gameServerPacketsReceived = 0;
 			if (numGameServerPacketsSent[lastReceivedGameTick] > 0)
 				for (int packetID = 0; packetID < SERVER_PACKETS_PER_TICK; packetID++)
