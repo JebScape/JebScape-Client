@@ -15,7 +15,6 @@ public class MegaserverMod
 	private JebScapeConnection server;
 	private int[] clientData = new int[3];
 	private Model ghostModel;
-	private WorldPoint currentServerPosition;
 	private boolean renderablesLoaded = false;
 	private JebScapeActor[] ghosts = new JebScapeActor[MAX_GHOSTS];
 	
