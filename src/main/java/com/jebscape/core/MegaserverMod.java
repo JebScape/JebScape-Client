@@ -124,7 +124,7 @@ public class MegaserverMod
 						// not using the third int; reserved for future use
 					}
 					
-					if (containsMegaserverCmd)
+					if (containsMegaserverCmd && playerWorld == client.getWorld())
 					{
 						// all ghost positional data within a packet is relative to 15 tiles SW of where the server believes the player to be
 						playerWorldLocationX -= 15;
