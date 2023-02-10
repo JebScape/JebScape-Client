@@ -332,7 +332,7 @@ public class JebScapeConnection
 						currentGameTick = newTick;
 						lastReceivedGameTick = newTick;
 						gameServerData[newTick][newPacketID].setData(gameServerPacket);
-						numGameServerPacketsSent[newTick] = newNumPacketsSent;
+						numGameServerPacketsSent[newTick] = newNumPacketsSent + 1; // we store in the range of 0-15 to represent 1-16
 					}
 				}
 			} while (bytesReceived > 0);
