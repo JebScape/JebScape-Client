@@ -32,6 +32,8 @@ public class JebScapeActor
 {
 	private Client client;
 	private RuneLiteObject rlObject;
+	private String overheadText;
+	private int world;
 	
 	private class Target
 	{
@@ -115,6 +117,8 @@ public class JebScapeActor
 	public void despawn()
 	{
 		rlObject.setActive(false);
+		overheadText = "";
+		this.world = 0;
 		this.currentAnimationID = -1;
 		this.currentMovementSpeed = 0;
 		this.currentTargetIndex = 0;
@@ -136,6 +140,36 @@ public class JebScapeActor
 	public WorldPoint getWorldLocation()
 	{
 		return targetQueueSize > 0 ? targetQueue[currentTargetIndex].worldDestinationPosition : WorldPoint.fromLocal(client, rlObject.getLocation());
+	}
+	
+	public LocalPoint getLocalLocation()
+	{
+		return rlObject.getLocation();
+	}
+	
+	public boolean isActive()
+	{
+		return rlObject.isActive();
+	}
+	
+	public void setWorld(int world)
+	{
+		this.world = world;
+	}
+	
+	public void setName(String name)
+	{
+		if (world != 0)
+			overheadText = "W" + world + ": ";
+		else
+			overheadText = "";
+		
+		overheadText += name;
+	}
+	
+	public String getOverheadText()
+	{
+		return overheadText;
 	}
 	
 	// moveTo() adds target movement states to the queue for later per-frame updating for rendering in onClientTick()

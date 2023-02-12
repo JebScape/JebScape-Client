@@ -27,8 +27,8 @@ package com.jebscape.core;
 import net.runelite.api.*;
 import net.runelite.api.coords.*;
 import net.runelite.api.events.*;
-
 import static net.runelite.api.NpcID.*;
+import java.nio.charset.*;
 
 public class MegaserverMod
 {
@@ -41,10 +41,11 @@ public class MegaserverMod
 	private Model ghostModel;
 	private boolean renderablesLoaded = false;
 	private JebScapeActor[] ghosts = new JebScapeActor[MAX_GHOSTS];
+	private byte[][] nameBytes = new byte[MAX_GHOSTS][12];
 	
 	
 	
-	public void init(Client client, JebScapeConnection server)
+	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay)
 	{
 		this.client = client;
 		this.server = server;
@@ -54,6 +55,9 @@ public class MegaserverMod
 			ghosts[i] = new JebScapeActor();
 			ghosts[i].init(client);
 		}
+		
+		indicatorOverlay.setClient(client);
+		indicatorOverlay.setJebScapeActors(ghosts);
 	}
 	
 	// must only be called once logged in
@@ -146,6 +150,18 @@ public class MegaserverMod
 						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);	// 32/32 bits
 						
 						// not using the third int; reserved for future use
+						
+						// profile stats:
+						/*
+						if (packetID == 0)
+						{
+							int coreTickTime = data.subDataBlocks[5][0];
+							int totalTickTime = data.subDataBlocks[5][1];
+							int postTickTime = data.subDataBlocks[5][2];
+							int playerCount = data.subDataBlocks[5][3];
+							client.addChatMessage(ChatMessageType.TENSECTIMEOUT, "", "Core: " + coreTickTime + " Total: " + totalTickTime + " Post: " + postTickTime + " Players: " + playerCount, null);
+						}
+						*/
 					}
 					
 					if (containsMegaserverCmd && playerWorld == client.getWorld())
@@ -191,6 +207,27 @@ public class MegaserverMod
 									
 									WorldPoint ghostPosition = new WorldPoint(playerWorldLocationX + dx, playerWorldLocationY + dy, playerWorldLocationPlane);
 									ghosts[ghostID].moveTo(ghostPosition, packedOrientation * JAU_PACKING_RATIO, animationID, isInteracting, isPoseAnimation);
+									
+									// extract ghost world and name
+									int ghostWorld = data.subDataBlocks[j + 1][0];
+									ghosts[ghostID].setWorld(ghostWorld);
+									
+									nameBytes[ghostID][0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
+									nameBytes[ghostID][1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
+									nameBytes[ghostID][2] = (byte)((data.subDataBlocks[j + 1][1] >>> 16) & 0xFF);
+									nameBytes[ghostID][3] = (byte)((data.subDataBlocks[j + 1][1] >>> 24) & 0xFF);
+									
+									nameBytes[ghostID][4] = (byte)(data.subDataBlocks[j + 1][2] & 0xFF);
+									nameBytes[ghostID][5] = (byte)((data.subDataBlocks[j + 1][2] >>> 8) & 0xFF);
+									nameBytes[ghostID][6] = (byte)((data.subDataBlocks[j + 1][2] >>> 16) & 0xFF);
+									nameBytes[ghostID][7] = (byte)((data.subDataBlocks[j + 1][2] >>> 24) & 0xFF);
+									
+									nameBytes[ghostID][8] = (byte)(data.subDataBlocks[j + 1][3] & 0xFF);
+									nameBytes[ghostID][9] = (byte)((data.subDataBlocks[j + 1][3] >>> 8) & 0xFF);
+									nameBytes[ghostID][10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
+									nameBytes[ghostID][11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
+									
+									ghosts[ghostID].setName(new String(nameBytes[ghostID], StandardCharsets.UTF_8).stripTrailing());
 								}
 							}
 						}
@@ -267,7 +304,6 @@ public class MegaserverMod
 		Player player = client.getLocalPlayer();
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
-			// TODO: we need to still test if we can reuse the same model or if we need to spawn multiple versions
 			ghosts[i].setModel(ghostModel);
 			ghosts[i].setPoseAnimations(player);
 		}

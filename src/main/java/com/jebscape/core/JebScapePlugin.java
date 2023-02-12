@@ -35,6 +35,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 @Slf4j
 @PluginDescriptor(
@@ -44,7 +45,10 @@ public class JebScapePlugin extends Plugin
 {
 	@Inject
 	private Client client;
-	
+	@Inject
+	private OverlayManager overlayManager;
+	@Inject
+	private JebScapeActorIndicatorOverlay actorIndicatorOverlay;
 	@Inject
 	private ClientThread clientThread;
 	@Inject
@@ -59,10 +63,11 @@ public class JebScapePlugin extends Plugin
 		
 		server.init();
 		server.connect();
+		overlayManager.add(actorIndicatorOverlay);
 		
 		clientThread.invoke(() ->
 		{
-			megaserverMod.init(client, server);
+			megaserverMod.init(client, server, actorIndicatorOverlay);
 		});
 	}
 	
@@ -74,6 +79,7 @@ public class JebScapePlugin extends Plugin
 			megaserverMod.stop();
 		});
 		
+		overlayManager.remove(actorIndicatorOverlay);
 		server.disconnect();
 		
 		log.info("JebScape has stopped!");

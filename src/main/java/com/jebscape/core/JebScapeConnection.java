@@ -26,6 +26,7 @@ package com.jebscape.core;
 
 import java.net.*;
 import java.nio.channels.*;
+import java.nio.charset.*;
 
 public class JebScapeConnection
 {
@@ -167,7 +168,7 @@ public class JebScapeConnection
 		loginPacketHeader |= (PROTOCOL_VERSION & 0xFF) << 20;		// 28/32 bits
 		loginPacketHeader |= 0xF << 28;								// 32/32 bits
 		
-		byte[] nameBytes = accountName.getBytes();
+		byte[] nameBytes = accountName.getBytes(StandardCharsets.UTF_8);
 		int strLen = accountName.length();
 		int reserved = 0xFFFFFFFF;
 		
