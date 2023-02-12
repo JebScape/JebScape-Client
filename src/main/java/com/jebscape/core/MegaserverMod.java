@@ -227,7 +227,7 @@ public class MegaserverMod
 									nameBytes[ghostID][10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
 									nameBytes[ghostID][11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
 									
-									ghosts[ghostID].setName(new String(nameBytes[ghostID], StandardCharsets.UTF_8).stripTrailing());
+									ghosts[ghostID].setName(new String(nameBytes[ghostID], StandardCharsets.UTF_8).trim());
 								}
 							}
 						}
