@@ -352,7 +352,7 @@ public class MegaserverMod
 										}
 									}
 									
-									ghosts[i].setChatMessage(new String(chatBytes, StandardCharsets.UTF_8).trim());
+									ghosts[ghostID].setChatMessage(new String(chatBytes, StandardCharsets.UTF_8).trim());
 									break;
 								}
 							}
