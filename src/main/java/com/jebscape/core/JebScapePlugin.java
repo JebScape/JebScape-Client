@@ -34,9 +34,12 @@ import net.runelite.api.events.*;
 import net.runelite.client.callback.*;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.*;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
+
+import java.util.*;
 
 @Slf4j
 @PluginDescriptor(
@@ -56,6 +59,7 @@ public class JebScapePlugin extends Plugin
 	private JebScapeConfig config;
 	private JebScapeConnection server = new JebScapeConnection();
 	private MegaserverMod megaserverMod = new MegaserverMod();
+	private boolean useMegaserverMod = true;
 	
 	@Override
 	protected void startUp() throws Exception
@@ -68,6 +72,8 @@ public class JebScapePlugin extends Plugin
 		
 		clientThread.invoke(() ->
 		{
+			// TODO: Figure out how to read the config key from here so user's selection is persisted
+			useMegaserverMod = true;
 			megaserverMod.init(client, server, actorIndicatorOverlay);
 		});
 	}
@@ -77,6 +83,7 @@ public class JebScapePlugin extends Plugin
 	{
 		clientThread.invoke(() ->
 		{
+			server.logout();
 			megaserverMod.stop();
 		});
 		
@@ -116,11 +123,29 @@ public class JebScapePlugin extends Plugin
 	}
 	
 	@Subscribe
+	public void onConfigChanged(ConfigChanged event)
+	{
+		if ("megaserver".equals(event.getKey()))
+		{
+			if (Objects.equals(event.getNewValue(), "true"))
+				useMegaserverMod = true;
+			else
+				useMegaserverMod = false;
+		}
+	}
+	
+	@Subscribe
 	// onGameTick() only runs upon completion of Jagex server packet processing
 	public void onGameTick(GameTick gameTick)
 	{
+		if (!useMegaserverMod && megaserverMod.isActive())
+		{
+			server.logout();
+			megaserverMod.stop();
+		}
+		
 		// don't tick anything if not logged into OSRS
-		if (client.getGameState() == GameState.LOGGED_IN || client.getGameState() == GameState.LOADING)
+		if (useMegaserverMod && (client.getGameState() == GameState.LOGGED_IN || client.getGameState() == GameState.LOADING))
 		{
 			// TODO: Consider processing received data from the JebScape server at a faster pace using onClientTick()
 			server.onGameTick();

@@ -124,6 +124,7 @@ public class JebScapeActor
 	{
 		rlObject.setActive(false);
 		overheadText = "";
+		actorName = "";
 		this.world = 0;
 		this.currentAnimationID = -1;
 		this.currentMovementSpeed = 0;

@@ -40,7 +40,6 @@ public class MegaserverMod
 	private JebScapeConnection server;
 	private int[] clientData = new int[3];
 	private Model ghostModel;
-	private boolean renderablesLoaded = false;
 	private JebScapeActor[] ghosts = new JebScapeActor[MAX_GHOSTS];
 	private byte[] nameBytes = new byte[12];
 	private byte[] chatBytes = new byte[80];
@@ -71,8 +70,7 @@ public class MegaserverMod
 		
 		this.isActive = true;
 		
-		if (!renderablesLoaded)
-			loadGhostRenderables();
+		loadGhostRenderables();
 		
 		if (!server.isLoggedIn())
 			server.login(client.getAccountHash(), 0, Text.sanitize(client.getLocalPlayer().getName()), false);
@@ -441,7 +439,5 @@ public class MegaserverMod
 			ghosts[i].setModel(ghostModel);
 			ghosts[i].setPoseAnimations(player);
 		}
-		
-		renderablesLoaded = true;
 	}
 }
