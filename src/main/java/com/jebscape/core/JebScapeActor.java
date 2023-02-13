@@ -196,7 +196,7 @@ public class JebScapeActor
 		this.chatMessage = chatMessage;
 		this.remainingOverheadChatMessageTime = MAX_CHAT_MESSAGE_TIME;
 		// TODO: add this to a global chat message queue so we don't get our message dropped if too many occur at once
-		client.addChatMessage(ChatMessageType.PUBLICCHAT, actorName, chatMessage, null);
+		client.addChatMessage(ChatMessageType.PUBLICCHAT, getOverheadText(), chatMessage, null);
 	}
 	
 	public String getChatMessage()
