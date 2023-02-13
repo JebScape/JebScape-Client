@@ -32,8 +32,12 @@ public class JebScapeActor
 {
 	private Client client;
 	private RuneLiteObject rlObject;
-	private String overheadText;
 	private int world;
+	private String actorName;
+	private String overheadText;
+	private String chatMessage;
+	private final int MAX_CHAT_MESSAGE_TIME = 6; // number of game ticks that chat message will be visible above player's head
+	private int remainingOverheadChatMessageTime;
 	
 	private class Target
 	{
@@ -92,6 +96,7 @@ public class JebScapeActor
 		for (int i = 0; i < MAX_TARGET_QUEUE_SIZE; i++)
 			targetQueue[i] = new Target();
 	}
+	
 	public void setModel(Model model)
 	{
 		rlObject.setModel(model);
@@ -112,6 +117,7 @@ public class JebScapeActor
 		this.currentMovementSpeed = 0;
 		this.currentTargetIndex = 0;
 		this.targetQueueSize = 0;
+		this.remainingOverheadChatMessageTime = 0;
 	}
 	
 	public void despawn()
@@ -123,6 +129,7 @@ public class JebScapeActor
 		this.currentMovementSpeed = 0;
 		this.currentTargetIndex = 0;
 		this.targetQueueSize = 0;
+		this.remainingOverheadChatMessageTime = 0;
 	}
 	
 	public void setPoseAnimations(Actor actor)
@@ -157,19 +164,44 @@ public class JebScapeActor
 		this.world = world;
 	}
 	
+	public int getWorld()
+	{
+		return world;
+	}
+	
 	public void setName(String name)
 	{
+		this.actorName = name;
+		
 		if (world != 0)
-			overheadText = "W" + world + ": ";
+			overheadText = "[W" + world + "] ";
 		else
 			overheadText = "";
 		
 		overheadText += name;
 	}
 	
+	public String getName()
+	{
+		return actorName;
+	}
+	
 	public String getOverheadText()
 	{
 		return overheadText;
+	}
+	
+	public void setChatMessage(String chatMessage)
+	{
+		this.chatMessage = chatMessage;
+		this.remainingOverheadChatMessageTime = MAX_CHAT_MESSAGE_TIME;
+		// TODO: add this to a global chat message queue so we don't get our message dropped if too many occur at once
+		client.addChatMessage(ChatMessageType.PUBLICCHAT, actorName, chatMessage, null);
+	}
+	
+	public String getChatMessage()
+	{
+		return chatMessage;
 	}
 	
 	// moveTo() adds target movement states to the queue for later per-frame updating for rendering in onClientTick()
@@ -325,6 +357,16 @@ public class JebScapeActor
 		this.targetQueue[newTargetIndex].isInteracting = isInteracting;
 		this.targetQueue[newTargetIndex].isPoseAnimation = isPoseAnimation;
 		this.targetQueue[newTargetIndex].isMidPoint = false;
+		
+		// handle chat message
+		if (remainingOverheadChatMessageTime > 0)
+		{
+			this.remainingOverheadChatMessageTime--;
+			
+			// overhead chat should not remain visible after this
+			if (remainingOverheadChatMessageTime == 0 && !chatMessage.isEmpty())
+				this.chatMessage = "";
+		}
 	}
 	
 	// onClientTick() updates the per-frame state needed for rendering actor movement

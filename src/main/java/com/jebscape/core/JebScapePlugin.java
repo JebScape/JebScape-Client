@@ -24,6 +24,7 @@
  */
 package com.jebscape.core;
 
+import com.google.common.eventbus.*;
 import com.google.inject.Provides;
 
 import javax.inject.Inject;
@@ -101,6 +102,13 @@ public class JebScapePlugin extends Plugin
 	}
 	
 	@Subscribe
+	public void onChatMessage(ChatMessage chatMessage)
+	{
+		if (megaserverMod.isActive())
+			megaserverMod.onChatMessage(chatMessage);
+	}
+	
+	@Subscribe
 	public void onAnimationChanged(AnimationChanged animationChanged)
 	{
 		if (megaserverMod.isActive())
@@ -117,7 +125,7 @@ public class JebScapePlugin extends Plugin
 			// TODO: Consider processing received data from the JebScape server at a faster pace using onClientTick()
 			server.onGameTick();
 			
-			if (!server.isLoggedIn())
+			if (!server.isGameLoggedIn())
 			{
 				// we want to clean up if no longer logged in
 				if (megaserverMod.isActive())
@@ -128,6 +136,10 @@ public class JebScapePlugin extends Plugin
 			}
 			else if (client.getAccountHash() == server.getAccountHash())
 			{
+				// since we have a game and chat server, one may still be not logged in, so let's try again
+				if (!server.isChatLoggedIn())
+					server.login(client.getAccountHash(), 0, client.getLocalPlayer().getName(), false);
+				
 				boolean loggedInAsGuest = server.isGuest();
 				int gameDataBytesSent = 0;
 				
@@ -135,7 +147,7 @@ public class JebScapePlugin extends Plugin
 				if (!megaserverMod.isActive())
 					megaserverMod.start();
 				
-				gameDataBytesSent += megaserverMod.onGameTick(gameTick);
+				gameDataBytesSent += megaserverMod.onGameTick();
 			}
 		}
 	}

@@ -27,6 +27,7 @@ package com.jebscape.core;
 import net.runelite.api.*;
 import net.runelite.api.coords.*;
 import net.runelite.api.events.*;
+import net.runelite.client.util.Text;
 import static net.runelite.api.NpcID.*;
 import java.nio.charset.*;
 
@@ -41,8 +42,9 @@ public class MegaserverMod
 	private Model ghostModel;
 	private boolean renderablesLoaded = false;
 	private JebScapeActor[] ghosts = new JebScapeActor[MAX_GHOSTS];
-	private byte[][] nameBytes = new byte[MAX_GHOSTS][12];
-	
+	private byte[] nameBytes = new byte[12];
+	private byte[] chatBytes = new byte[80];
+	private String chatMessageToSend = "";
 	
 	
 	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay)
@@ -73,7 +75,7 @@ public class MegaserverMod
 			loadGhostRenderables();
 		
 		if (!server.isLoggedIn())
-			server.login(client.getAccountHash(), 0, client.getLocalPlayer().getName(), false);
+			server.login(client.getAccountHash(), 0, Text.sanitize(client.getLocalPlayer().getName()), false);
 	}
 	
 	public void stop()
@@ -82,6 +84,7 @@ public class MegaserverMod
 			return;
 		
 		this.isActive = false;
+		this.chatMessageToSend = "";
 		
 		for (int i = 0; i < MAX_GHOSTS; i++)
 			ghosts[i].despawn();
@@ -92,18 +95,35 @@ public class MegaserverMod
 		return isActive;
 	}
 	
+	public void onChatMessage(ChatMessage chatMessage)
+	{
+		if (chatMessage.getName() != null && (chatMessage.getType() == ChatMessageType.PUBLICCHAT || chatMessage.getType() == ChatMessageType.MODCHAT))
+		{
+			String senderName = Text.sanitize(chatMessage.getName());
+			String playerName = Text.sanitize(client.getLocalPlayer().getName());
+			// check if we were the sender
+			if (chatMessage.getName() != null && senderName.contentEquals(playerName))
+			{
+				this.chatMessageToSend = chatMessage.getMessage();
+			}
+		}
+	}
+	
 	public void onAnimationChanged(AnimationChanged animationChanged)
 	{
 		// TODO: check against the local player; maybe checking this earlier will help fix some of our animation issues
 	}
 	
 	// returns number of game data bytes sent
-	public int onGameTick(GameTick gameTick)
+	public int onGameTick()
 	{
 		// analyze most recent data received from the server
-		JebScapeServerData[][] serverData = server.getRecentGameServerData();
-		int[] numPacketsSent = server.getNumGameServerPacketsSent();
-		int lastReceivedTick = server.getLastReceivedGameTick();
+		JebScapeServerData[][] gameServerData = server.getRecentGameServerData();
+		JebScapeServerData[][] chatServerData = server.getRecentChatServerData();
+		int[] numGamePacketsSent = server.getNumGameServerPacketsSent();
+		int[] numChatPacketsSent = server.getNumChatServerPacketsSent();
+		int lastReceivedGameTick = server.getLastReceivedGameTick();
+		int lastReceivedChatTick = server.getLastReceivedChatTick();
 		final int JAU_PACKING_RATIO = 32;
 		
 		// this will update up to 64 ghosts with up to 16 past ticks' worth of data
@@ -112,14 +132,14 @@ public class MegaserverMod
 		for (int i = 0; i < server.TICKS_UNTIL_LOGOUT; i++)
 		{
 			// start the cycle from the earliest tick we might have data on
-			int tick = (lastReceivedTick + i) % server.TICKS_UNTIL_LOGOUT;
+			int gameTick = (lastReceivedGameTick + i) % server.TICKS_UNTIL_LOGOUT;
 			
 			// only bother if we've received any packets for this tick
-			if (numPacketsSent[tick] > 0)
+			if (numGamePacketsSent[gameTick] > 0)
 			{
-				for (int packetID = 0; packetID < server.SERVER_PACKETS_PER_TICK; packetID++)
+				for (int packetID = 0; packetID < server.GAME_SERVER_PACKETS_PER_TICK; packetID++)
 				{
-					JebScapeServerData data = serverData[tick][packetID];
+					JebScapeServerData data = gameServerData[gameTick][packetID];
 					boolean emptyPacket = data.isEmpty();
 					boolean containsMegaserverCmd = false;
 					int playerWorldFlags = 0;
@@ -155,13 +175,13 @@ public class MegaserverMod
 						/*
 						if (packetID == 0)
 						{
-							int coreTickTime = data.subDataBlocks[5][0];
-							int totalTickTime = data.subDataBlocks[5][1];
-							int postTickTime = data.subDataBlocks[5][2];
-							int playerCount = data.subDataBlocks[5][3];
+							int coreTickTime = data.subDataBlocks[6][0];
+							int totalTickTime = data.subDataBlocks[6][1];
+							int postTickTime = data.subDataBlocks[6][2];
+							int playerCount = data.subDataBlocks[6][3];
 							client.addChatMessage(ChatMessageType.TENSECTIMEOUT, "", "Core: " + coreTickTime + " Total: " + totalTickTime + " Post: " + postTickTime + " Players: " + playerCount, null);
 						}
-						*/
+						//*/
 					}
 					
 					if (containsMegaserverCmd && playerWorld == client.getWorld())
@@ -176,7 +196,7 @@ public class MegaserverMod
 							int ghostID = packetID * JebScapeServerData.SUB_DATA_BLOCK_SIZE + j;
 							
 							// all data outside the total range must necessarily have despawned ghosts
-							if (packetID >= numPacketsSent[tick])
+							if (packetID >= numGamePacketsSent[gameTick])
 								ghosts[ghostID].despawn();
 							else if (!emptyPacket) // within range and not empty, so let's process
 							{
@@ -212,22 +232,128 @@ public class MegaserverMod
 									int ghostWorld = data.subDataBlocks[j + 1][0];
 									ghosts[ghostID].setWorld(ghostWorld);
 									
-									nameBytes[ghostID][0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
-									nameBytes[ghostID][1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
-									nameBytes[ghostID][2] = (byte)((data.subDataBlocks[j + 1][1] >>> 16) & 0xFF);
-									nameBytes[ghostID][3] = (byte)((data.subDataBlocks[j + 1][1] >>> 24) & 0xFF);
+									nameBytes[0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
+									nameBytes[1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
+									nameBytes[2] = (byte)((data.subDataBlocks[j + 1][1] >>> 16) & 0xFF);
+									nameBytes[3] = (byte)((data.subDataBlocks[j + 1][1] >>> 24) & 0xFF);
 									
-									nameBytes[ghostID][4] = (byte)(data.subDataBlocks[j + 1][2] & 0xFF);
-									nameBytes[ghostID][5] = (byte)((data.subDataBlocks[j + 1][2] >>> 8) & 0xFF);
-									nameBytes[ghostID][6] = (byte)((data.subDataBlocks[j + 1][2] >>> 16) & 0xFF);
-									nameBytes[ghostID][7] = (byte)((data.subDataBlocks[j + 1][2] >>> 24) & 0xFF);
+									nameBytes[4] = (byte)(data.subDataBlocks[j + 1][2] & 0xFF);
+									nameBytes[5] = (byte)((data.subDataBlocks[j + 1][2] >>> 8) & 0xFF);
+									nameBytes[6] = (byte)((data.subDataBlocks[j + 1][2] >>> 16) & 0xFF);
+									nameBytes[7] = (byte)((data.subDataBlocks[j + 1][2] >>> 24) & 0xFF);
 									
-									nameBytes[ghostID][8] = (byte)(data.subDataBlocks[j + 1][3] & 0xFF);
-									nameBytes[ghostID][9] = (byte)((data.subDataBlocks[j + 1][3] >>> 8) & 0xFF);
-									nameBytes[ghostID][10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
-									nameBytes[ghostID][11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
+									nameBytes[8] = (byte)(data.subDataBlocks[j + 1][3] & 0xFF);
+									nameBytes[9] = (byte)((data.subDataBlocks[j + 1][3] >>> 8) & 0xFF);
+									nameBytes[10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
+									nameBytes[11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
 									
-									ghosts[ghostID].setName(new String(nameBytes[ghostID], StandardCharsets.UTF_8).trim());
+									ghosts[ghostID].setName(new String(nameBytes, StandardCharsets.UTF_8).trim());
+								}
+							}
+						}
+					}
+				}
+			}
+			
+			// now let's do all this again for chat messages
+			int chatTick = (lastReceivedChatTick + i) % server.TICKS_UNTIL_LOGOUT;
+			
+			// only bother if we've received any packets for this tick
+			if (numChatPacketsSent[chatTick] > 0)
+			{
+				for (int packetID = 0; packetID < server.CHAT_SERVER_PACKETS_PER_TICK; packetID++)
+				{
+					JebScapeServerData data = chatServerData[chatTick][packetID];
+					boolean emptyPacket = data.isEmpty();
+					boolean containsMegaserverCmd = false;
+					int playerWorldFlags = 0;
+					int playerWorld = 0;
+					int playerWorldLocationX = 0;
+					int playerWorldLocationY = 0;
+					int playerWorldLocationPlane = 0;
+					
+					// let's initialize our player position data
+					if (!emptyPacket)
+					{
+						// unpack the core data
+						// 8 bitflags for chat command
+						// 1 bit isPVP
+						// 1 bit isInstanced
+						// 6 bits reserved
+						// 14 bits world
+						// 2 bits plane
+						containsMegaserverCmd = ((data.coreData[0] & 0xFF) & // bitflag, so let's just test the one bit
+								MEGASERVER_MOVEMENT_UPDATE_CMD) != 0;	// 8/32 bits
+						playerWorldFlags = (data.coreData[0] >>> 8) & 0xFF;				// 16/32 bits
+						playerWorld = (data.coreData[0] >>> 16) & 0x3FFF;				// 30/32 bits
+						playerWorldLocationPlane = (data.coreData[0] >>> 30) & 0x3; 	// 32/32 bits
+						
+						// 16 bits world X position
+						// 16 bits world Y position
+						playerWorldLocationX = (data.coreData[1] & 0xFFFF);				// 16/32 bits
+						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);	// 32/32 bits
+						
+						// not using the third int; reserved for future use
+						
+						// profile stats:
+						/*
+						if (packetID == 0)
+						{
+							int coreTickTime = data.subDataBlocks[6][0];
+							int totalTickTime = data.subDataBlocks[6][1];
+							int postTickTime = data.subDataBlocks[6][2];
+							int playerCount = data.subDataBlocks[6][3];
+							client.addChatMessage(ChatMessageType.TENSECTIMEOUT, "", "Core: " + coreTickTime + " Total: " + totalTickTime + " Post: " + postTickTime + " Players: " + playerCount, null);
+						}
+						//*/
+					}
+					
+					if (containsMegaserverCmd && playerWorld == client.getWorld())
+					{
+						// extract chat message
+						int ghostWorld = data.subDataBlocks[0][0];
+						
+						if (ghostWorld != 0)
+						{
+							// a chat message exists, so let's extract the rest
+							nameBytes[0] = (byte)(data.subDataBlocks[0][1] & 0xFF);
+							nameBytes[1] = (byte)((data.subDataBlocks[0][1] >>> 8) & 0xFF);
+							nameBytes[2] = (byte)((data.subDataBlocks[0][1] >>> 16) & 0xFF);
+							nameBytes[3] = (byte)((data.subDataBlocks[0][1] >>> 24) & 0xFF);
+							
+							nameBytes[4] = (byte)(data.subDataBlocks[0][2] & 0xFF);
+							nameBytes[5] = (byte)((data.subDataBlocks[0][2] >>> 8) & 0xFF);
+							nameBytes[6] = (byte)((data.subDataBlocks[0][2] >>> 16) & 0xFF);
+							nameBytes[7] = (byte)((data.subDataBlocks[0][2] >>> 24) & 0xFF);
+							
+							nameBytes[8] = (byte)(data.subDataBlocks[0][3] & 0xFF);
+							nameBytes[9] = (byte)((data.subDataBlocks[0][3] >>> 8) & 0xFF);
+							nameBytes[10] = (byte)((data.subDataBlocks[0][3] >>> 16) & 0xFF);
+							nameBytes[11] = (byte)((data.subDataBlocks[0][3] >>> 24) & 0xFF);
+							
+							String senderName = new String(nameBytes, StandardCharsets.UTF_8).trim();
+							// now let's see if we can find the corresponding ghost for this chat message
+							for (int ghostID = 0; ghostID < MAX_GHOSTS; ghostID++)
+							{
+								JebScapeActor ghost = ghosts[ghostID];
+								String name = ghost.getName();
+								if (name != null && name.contentEquals(senderName) && ghost.getWorld() == ghostWorld)
+								{
+									// we found our ghost, let's proceed
+									int index = 0;
+									for (int j = 1; j < 6; j++)
+									{
+										for (int k = 0; k < 4; k++)
+										{
+											chatBytes[index++] = (byte)(data.subDataBlocks[j][k] & 0xFF);
+											chatBytes[index++] = (byte)((data.subDataBlocks[j][k] >>> 8) & 0xFF);
+											chatBytes[index++] = (byte)((data.subDataBlocks[j][k] >>> 16) & 0xFF);
+											chatBytes[index++] = (byte)((data.subDataBlocks[j][k] >>> 24) & 0xFF);
+										}
+									}
+									
+									ghosts[i].setChatMessage(new String(chatBytes, StandardCharsets.UTF_8).trim());
+									break;
 								}
 							}
 						}
@@ -276,7 +402,15 @@ public class MegaserverMod
 		clientData[2] |= (isInteracting ? 0x1 : 0x0) << 30;		// 31/32 bits
 		clientData[2] |= (isPoseAnimation ? 0x1 : 0x0) << 31;	// 32/32 bits
 		
-		return server.sendGameData(clientData[0], clientData[1], clientData[2]) ? 12 : 0; // 3 * 4-byte ints = 12 bytes
+		String chatMessage = "";
+		// check if we've recently sent a chat message
+		if (!chatMessageToSend.isEmpty())
+		{
+			chatMessage = chatMessageToSend;
+			this.chatMessageToSend = ""; // we only want to send it once
+		}
+		
+		return server.sendGameData(clientData[0], clientData[1], clientData[2], chatMessage) ? 12 : 0; // 3 * 4-byte ints = 12 bytes
 	}
 	
 	public void onClientTick(ClientTick clientTick)
