@@ -335,7 +335,7 @@ public class MegaserverMod
 							{
 								JebScapeActor ghost = ghosts[ghostID];
 								String name = ghost.getName();
-								if (name != null && name.contentEquals(senderName) && ghost.getWorld() == ghostWorld)
+								if (ghost.getWorld() == ghostWorld && name != null && name.contentEquals(senderName))
 								{
 									// we found our ghost, let's proceed
 									int index = 0;
