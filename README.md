@@ -8,7 +8,7 @@ As a WIP, a number of systems remain experimental. This is being published to be
 Current Mods:
 - Megaserver Mod (cross-world play with others on other worlds)
 
-![image](https://user-images.githubusercontent.com/112780479/219286163-b9f38b9c-78b3-42ed-97f9-cecf14e82353.png)
+![image](https://user-images.githubusercontent.com/112780479/219288264-7dbbdfea-4a4c-4cd3-b10d-fb49257ef1eb.png)
 
 Future Planned Mods:
 - Live Hiscores Mod (see ranks change instantly; enables post-200m training)
