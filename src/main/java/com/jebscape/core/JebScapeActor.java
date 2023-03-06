@@ -33,6 +33,7 @@ public class JebScapeActor
 	private Client client;
 	private RuneLiteObject rlObject;
 	private int world;
+	private int plane;
 	private String actorName;
 	private String overheadText;
 	private String chatMessage;
@@ -49,6 +50,7 @@ public class JebScapeActor
 		public boolean isPoseAnimation;
 		public boolean isInteracting;
 		public boolean isMidPoint;
+		public boolean isInstanced;
 	}
 	private final int MAX_TARGET_QUEUE_SIZE = 10;
 	private Target[] targetQueue = new Target[MAX_TARGET_QUEUE_SIZE];
@@ -108,11 +110,12 @@ public class JebScapeActor
 		if (localPosition != null && client.getPlane() == position.getPlane())
 			rlObject.setLocation(localPosition, position.getPlane());
 		else
-			rlObject.setLocation(new LocalPoint(0, 0), client.getPlane());
+			return;
 		rlObject.setOrientation(jauOrientation);
 		rlObject.setAnimation(null);
 		rlObject.setShouldLoop(true);
 		rlObject.setActive(true);
+		this.plane = position.getPlane();
 		this.currentAnimationID = -1;
 		this.currentMovementSpeed = 0;
 		this.currentTargetIndex = 0;
@@ -123,14 +126,16 @@ public class JebScapeActor
 	public void despawn()
 	{
 		rlObject.setActive(false);
-		overheadText = "";
-		actorName = "";
+		this.overheadText = "";
+		this.actorName = "";
+		this.chatMessage = "";
+		this.remainingOverheadChatMessageTime = 0;
 		this.world = 0;
+		this.plane = 0;
 		this.currentAnimationID = -1;
 		this.currentMovementSpeed = 0;
 		this.currentTargetIndex = 0;
 		this.targetQueueSize = 0;
-		this.remainingOverheadChatMessageTime = 0;
 	}
 	
 	public void setPoseAnimations(Actor actor)
@@ -197,7 +202,7 @@ public class JebScapeActor
 		this.chatMessage = chatMessage;
 		this.remainingOverheadChatMessageTime = MAX_CHAT_MESSAGE_TIME;
 		// TODO: add this to a global chat message queue so we don't get our message dropped if too many occur at once
-		client.addChatMessage(ChatMessageType.PUBLICCHAT, getOverheadText(), chatMessage, null);
+		client.addChatMessage(ChatMessageType.PUBLICCHAT, actorName, chatMessage, null);
 	}
 	
 	public String getChatMessage()
@@ -210,11 +215,17 @@ public class JebScapeActor
 	// This is not set up for pathfinding to the final destination of distant targets (you will just move there directly)
 	// It will, however, handle nearby collision detection (1-2 tiles away from you) under certain scenarios
 	// jauOrientation is not used if isInteracting is false; it will instead default to the angle being moved towards
-	public void moveTo(WorldPoint worldPosition, int jauOrientation, int primaryAnimationID, boolean isInteracting, boolean isPoseAnimation)
+	public void moveTo(WorldPoint worldPosition, int jauOrientation, int primaryAnimationID, boolean isInteracting, boolean isPoseAnimation, boolean isInstanced)
 	{
 		// respawn this actor if it was previously despawned
 		if (!rlObject.isActive())
+		{
 			spawn(worldPosition, jauOrientation);
+			
+			// if still not active, just exit
+			if (!rlObject.isActive())
+				return;
+		}
 		
 		// just clear the queue and move immediately to the destination if many ticks behind
 		if (targetQueueSize >= MAX_TARGET_QUEUE_SIZE - 2)
@@ -240,7 +251,7 @@ public class JebScapeActor
 		}
 		
 		int distance = prevWorldPosition.distanceTo(worldPosition);
-		if (distance > 0 && distance <= 2)
+		if (distance > 0 && distance <= 2 && !isInstanced)
 		{
 			int dx = worldPosition.getX() - prevWorldPosition.getX();
 			int dy = worldPosition.getY() - prevWorldPosition.getY();
@@ -334,6 +345,7 @@ public class JebScapeActor
 				this.targetQueue[newTargetIndex].isPoseAnimation = isPoseAnimation;
 				this.targetQueue[newTargetIndex].isInteracting = isInteracting;
 				this.targetQueue[newTargetIndex].isMidPoint = true;
+				this.targetQueue[newTargetIndex].isInstanced = isInstanced;
 				
 				newTargetIndex = (currentTargetIndex + targetQueueSize++) % MAX_TARGET_QUEUE_SIZE;
 				prevWorldPosition = midPoint;
@@ -358,6 +370,7 @@ public class JebScapeActor
 		this.targetQueue[newTargetIndex].isInteracting = isInteracting;
 		this.targetQueue[newTargetIndex].isPoseAnimation = isPoseAnimation;
 		this.targetQueue[newTargetIndex].isMidPoint = false;
+		this.targetQueue[newTargetIndex].isInstanced = isInstanced;
 		
 		// handle chat message
 		if (remainingOverheadChatMessageTime > 0)
@@ -381,9 +394,27 @@ public class JebScapeActor
 				LocalPoint targetPosition = targetQueue[currentTargetIndex].localDestinationPosition;
 				int targetOrientation = targetQueue[currentTargetIndex].jauDestinationOrientation;
 				
-				if (client.getPlane() != targetPlane || targetPosition == null || !targetPosition.isInScene() || targetOrientation < 0)
+				if (targetQueue[currentTargetIndex].isInstanced)
 				{
-					// this actor is no longer in a visible area on our client, so let's despawn it
+					// TODO: fix glitched instanced movement; proper movement is disabled for now
+					int distance = client.getLocalPlayer().getWorldLocation().distanceTo(WorldPoint.fromLocal(client, rlObject.getLocation()));
+					if (distance < 16)
+					{
+						// just don't move it from where it spawned
+						targetPosition = rlObject.getLocation();
+					}
+					else
+					{
+						// snap to appropriate location
+						rlObject.setLocation(targetPosition, plane);
+					}
+					
+					targetQueue[currentTargetIndex].tileMovementSpeed = 0;
+				}
+				
+				if (client.getPlane() != targetPlane || plane != targetPlane || targetPosition == null || !targetPosition.isInScene() || targetOrientation < 0)
+				{
+					// this actor is no longer in a visible area, so let's despawn it
 					despawn();
 					return false;
 				}

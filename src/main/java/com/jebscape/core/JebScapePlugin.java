@@ -68,6 +68,7 @@ public class JebScapePlugin extends Plugin
 		
 		server.init();
 		server.connect();
+		actorIndicatorOverlay.init();
 		overlayManager.add(actorIndicatorOverlay);
 		
 		clientThread.invoke(() ->

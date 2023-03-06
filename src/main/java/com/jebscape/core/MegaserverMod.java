@@ -145,6 +145,7 @@ public class MegaserverMod
 					int playerWorldLocationX = 0;
 					int playerWorldLocationY = 0;
 					int playerWorldLocationPlane = 0;
+					boolean isInstanced = false;
 					
 					// let's initialize our player position data
 					if (!emptyPacket)
@@ -168,6 +169,22 @@ public class MegaserverMod
 						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);	// 32/32 bits
 						
 						// not using the third int; reserved for future use
+						
+						// experimental implementation for instances
+						isInstanced = ((playerWorldFlags >> 0x1) & 0x1) == 0x1;
+						if (client.isInInstancedRegion() && isInstanced)
+						{
+							// find the difference between the instance positions
+							WorldPoint currentPlayerWorldPosition = client.getLocalPlayer().getWorldLocation();
+							WorldPoint currentPlayerInstancePosition = WorldPoint.fromLocalInstance(client, LocalPoint.fromWorld(client, currentPlayerWorldPosition));
+							int dx = playerWorldLocationX - currentPlayerInstancePosition.getX();
+							int dy = playerWorldLocationY - currentPlayerInstancePosition.getY();
+							
+							// add this difference to where our player happens to be located in normal world space
+							playerWorldLocationX = currentPlayerWorldPosition.getX() + dx;
+							playerWorldLocationY = currentPlayerWorldPosition.getY() + dy;
+							playerWorldLocationPlane = currentPlayerWorldPosition.getPlane();
+						}
 						
 						// profile stats:
 						/*
@@ -201,7 +218,7 @@ public class MegaserverMod
 								// each piece of ghost data is 4 bytes
 								int ghostData = data.subDataBlocks[0][j];
 								
-								// if the values are 0x1F (31) for each relativeX and relativeY, then the ghost has despawned
+								// if the values are 0x1F (31) for each dx and dy, then the ghost has despawned
 								// 10 bits combined for dx and dy; check first if despawned
 								boolean despawned = (ghostData & 0x3FF) == 0x3FF; // 10 bits (if dx and dy are both all 1s)
 								
@@ -224,7 +241,7 @@ public class MegaserverMod
 									boolean isPoseAnimation = ((ghostData >>> 31) & 0x1) == 0x1;	// 32/32 bits
 									
 									WorldPoint ghostPosition = new WorldPoint(playerWorldLocationX + dx, playerWorldLocationY + dy, playerWorldLocationPlane);
-									ghosts[ghostID].moveTo(ghostPosition, packedOrientation * JAU_PACKING_RATIO, animationID, isInteracting, isPoseAnimation);
+									ghosts[ghostID].moveTo(ghostPosition, packedOrientation * JAU_PACKING_RATIO, animationID, isInteracting, isPoseAnimation, isInstanced);
 									
 									// extract ghost world and name
 									int ghostWorld = data.subDataBlocks[j + 1][0];
@@ -269,6 +286,7 @@ public class MegaserverMod
 					int playerWorldLocationX = 0;
 					int playerWorldLocationY = 0;
 					int playerWorldLocationPlane = 0;
+					boolean isInstanced = false;
 					
 					// let's initialize our player position data
 					if (!emptyPacket)
@@ -292,6 +310,9 @@ public class MegaserverMod
 						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);	// 32/32 bits
 						
 						// not using the third int; reserved for future use
+						
+						// experimental implementation for instances
+						isInstanced = ((playerWorldFlags >> 0x1) & 0x1) == 0x1;
 						
 						// profile stats:
 						/*
@@ -370,6 +391,9 @@ public class MegaserverMod
 		boolean isPVP = WorldType.isPvpWorld(client.getWorldType());
 		boolean isInstanced = client.isInInstancedRegion();
 		
+		if (isInstanced)
+			position = WorldPoint.fromLocalInstance(client, LocalPoint.fromWorld(client, position));
+		
 		// populate the packet body
 		// 8 bitflags for game command
 		// 1 bit isPVP
@@ -431,7 +455,9 @@ public class MegaserverMod
 		for (int i = 0; i < ids.length; i++)
 			modelData[i] = client.loadModelData(ids[i]);
 		ModelData combinedModelData = client.mergeModels(modelData, ids.length);
-		this.ghostModel = combinedModelData.light(); // TODO: try adding some params to this to see if it fixes some lighting issues we have
+		
+		// use the same lighting parameters used for NPCs by Jagex
+		this.ghostModel = combinedModelData.light(64, 850, -30, -50, -30);
 		
 		Player player = client.getLocalPlayer();
 		for (int i = 0; i < MAX_GHOSTS; i++)

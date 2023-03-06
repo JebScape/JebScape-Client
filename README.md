@@ -6,7 +6,7 @@ Note: This is *NOT* a RSPS. This does not interface with Jagex's patented protoc
 As a WIP, a number of systems remain experimental. This is being published to begin public stress tests. Expect many broken features. Each of the following planned features are designed to iteratively add and test new features until the final deliverable is ready. Community contributions are appreciated and welcomed!
 
 Current Mods:
-- Megaserver Mod (cross-world play with others on other worlds)
+- Megaserver Mod (cross-world play and chat with others on other worlds)
 
 ![image](https://user-images.githubusercontent.com/112780479/219288264-7dbbdfea-4a4c-4cd3-b10d-fb49257ef1eb.png)
 

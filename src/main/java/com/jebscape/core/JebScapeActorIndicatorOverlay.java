@@ -34,10 +34,7 @@ import net.runelite.api.*;
 import net.runelite.api.Perspective;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.JagexColors;
-import net.runelite.client.ui.overlay.Overlay;
-import net.runelite.client.ui.overlay.OverlayPosition;
-import net.runelite.client.ui.overlay.OverlayPriority;
-import net.runelite.client.ui.overlay.OverlayUtil;
+import net.runelite.client.ui.overlay.*;
 
 @Singleton
 public class JebScapeActorIndicatorOverlay extends Overlay
@@ -45,6 +42,14 @@ public class JebScapeActorIndicatorOverlay extends Overlay
 	private JebScapeActor[] actors;
 	private Client client;
 	private Color color = new Color(5, 248, 242, 218);
+	
+	public void init()
+	{
+		setLayer(OverlayLayer.ABOVE_SCENE);
+		setPriority(OverlayPriority.HIGHEST);
+		setPosition(OverlayPosition.TOP_LEFT);
+		setMovable(false);
+	}
 	
 	public void setClient(Client client)
 	{
@@ -69,11 +74,21 @@ public class JebScapeActorIndicatorOverlay extends Overlay
 					String overheadText = actor.getOverheadText();
 					if (overheadText != null && !overheadText.isEmpty())
 					{
-						Point textLocation = Perspective.getCanvasTextLocation(client, graphics, actor.getLocalLocation(), overheadText, 250);
+						Point textLocation = Perspective.localToCanvas(client, actor.getLocalLocation(), client.getPlane(), 250);
 						
 						if (textLocation != null)
 						{
-							OverlayUtil.renderTextLocation(graphics, textLocation, overheadText, color);
+							Font chatFont = FontManager.getRunescapeSmallFont();
+							
+							// shift the position to center over the actor
+							FontMetrics metrics = graphics.getFontMetrics(chatFont);
+							textLocation = new Point(textLocation.getX() - (metrics.stringWidth(overheadText) / 2), textLocation.getY());
+							
+							if (textLocation != null)
+							{
+								graphics.setFont(chatFont);
+								OverlayUtil.renderTextLocation(graphics, textLocation, overheadText, color);
+							}
 						}
 					}
 					
@@ -84,7 +99,6 @@ public class JebScapeActorIndicatorOverlay extends Overlay
 						
 						if (textLocation != null)
 						{
-							Font overheadTextFont = graphics.getFont();
 							Font chatFont = FontManager.getRunescapeBoldFont();
 							
 							// shift the position to center over the actor
@@ -95,7 +109,6 @@ public class JebScapeActorIndicatorOverlay extends Overlay
 							{
 								graphics.setFont(chatFont);
 								OverlayUtil.renderTextLocation(graphics, textLocation, chatMessage, JagexColors.YELLOW_INTERFACE_TEXT);
-								graphics.setFont(overheadTextFont); // set it back afterwards
 							}
 						}
 					}
