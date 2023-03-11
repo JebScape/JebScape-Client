@@ -251,7 +251,7 @@ public class JebScapeActor
 		}
 		
 		int distance = prevWorldPosition.distanceTo(worldPosition);
-		if (distance > 0 && distance <= 2 && !isInstanced)
+		if (distance > 0 && distance <= 2)
 		{
 			int dx = worldPosition.getX() - prevWorldPosition.getX();
 			int dy = worldPosition.getY() - prevWorldPosition.getY();
@@ -393,24 +393,6 @@ public class JebScapeActor
 				int targetPlane = targetQueue[currentTargetIndex].worldDestinationPosition.getPlane();
 				LocalPoint targetPosition = targetQueue[currentTargetIndex].localDestinationPosition;
 				int targetOrientation = targetQueue[currentTargetIndex].jauDestinationOrientation;
-				
-				if (targetQueue[currentTargetIndex].isInstanced)
-				{
-					// TODO: fix glitched instanced movement; proper movement is disabled for now
-					int distance = client.getLocalPlayer().getWorldLocation().distanceTo(WorldPoint.fromLocal(client, rlObject.getLocation()));
-					if (distance < 16)
-					{
-						// just don't move it from where it spawned
-						targetPosition = rlObject.getLocation();
-					}
-					else
-					{
-						// snap to appropriate location
-						rlObject.setLocation(targetPosition, plane);
-					}
-					
-					targetQueue[currentTargetIndex].tileMovementSpeed = 0;
-				}
 				
 				if (client.getPlane() != targetPlane || plane != targetPlane || targetPosition == null || !targetPosition.isInScene() || targetOrientation < 0)
 				{
