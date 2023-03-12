@@ -46,7 +46,7 @@ public class MegaserverMod
 	private String chatMessageToSend = "";
 	
 	
-	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay)
+	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay, JebScapeMinimapOverlay minimapOverlay)
 	{
 		this.client = client;
 		this.server = server;
@@ -57,8 +57,8 @@ public class MegaserverMod
 			ghosts[i].init(client);
 		}
 		
-		indicatorOverlay.setClient(client);
 		indicatorOverlay.setJebScapeActors(ghosts);
+		minimapOverlay.setJebScapeActors(ghosts);
 	}
 	
 	// must only be called once logged in
@@ -443,7 +443,7 @@ public class MegaserverMod
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
 			// update local position and orientation
-			ghosts[i].onClientTick(clientTick);
+			ghosts[i].onClientTick();
 		}
 	}
 	

@@ -41,19 +41,15 @@ public class JebScapeActorIndicatorOverlay extends Overlay
 {
 	private JebScapeActor[] actors;
 	private Client client;
-	private Color color = new Color(5, 248, 242, 218);
+	final private Color color = new Color(5, 248, 242, 218);
 	
-	public void init()
+	public void init(Client client)
 	{
+		this.client = client;
 		setLayer(OverlayLayer.ABOVE_SCENE);
 		setPriority(OverlayPriority.HIGHEST);
 		setPosition(OverlayPosition.TOP_LEFT);
 		setMovable(false);
-	}
-	
-	public void setClient(Client client)
-	{
-		this.client = client;
 	}
 	
 	public void setJebScapeActors(JebScapeActor[] actors)
@@ -64,7 +60,7 @@ public class JebScapeActorIndicatorOverlay extends Overlay
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		if (client != null || actors != null)
+		if (actors != null)
 		{
 			for (int i = 0; i < actors.length; ++i)
 			{

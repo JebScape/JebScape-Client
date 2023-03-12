@@ -24,7 +24,6 @@
  */
 package com.jebscape.core;
 
-import com.google.common.eventbus.*;
 import com.google.inject.Provides;
 
 import javax.inject.Inject;
@@ -54,6 +53,8 @@ public class JebScapePlugin extends Plugin
 	@Inject
 	private JebScapeActorIndicatorOverlay actorIndicatorOverlay;
 	@Inject
+	private JebScapeMinimapOverlay minimapOverlay;
+	@Inject
 	private ClientThread clientThread;
 	@Inject
 	private JebScapeConfig config;
@@ -68,14 +69,16 @@ public class JebScapePlugin extends Plugin
 		
 		server.init();
 		server.connect();
-		actorIndicatorOverlay.init();
+		actorIndicatorOverlay.init(client);
+		minimapOverlay.init(client);
 		overlayManager.add(actorIndicatorOverlay);
+		overlayManager.add(minimapOverlay);
 		
 		clientThread.invoke(() ->
 		{
 			// TODO: Figure out how to read the config key from here so user's selection is persisted
 			useMegaserverMod = true;
-			megaserverMod.init(client, server, actorIndicatorOverlay);
+			megaserverMod.init(client, server, actorIndicatorOverlay, minimapOverlay);
 		});
 	}
 	

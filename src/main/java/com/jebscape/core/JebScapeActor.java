@@ -384,7 +384,7 @@ public class JebScapeActor
 	}
 	
 	// onClientTick() updates the per-frame state needed for rendering actor movement
-	public boolean onClientTick(ClientTick clientTick)
+	public boolean onClientTick()
 	{
 		if (rlObject.isActive())
 		{
