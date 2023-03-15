@@ -171,7 +171,7 @@ public class MegaserverMod
 						// not using the third int; reserved for future use
 						
 						// experimental implementation for instances
-						isInstanced = ((playerWorldFlags >> 0x1) & 0x1) == 0x1;
+						isInstanced = ((playerWorldFlags >>> 0x1) & 0x1) == 0x1;
 						if (client.isInInstancedRegion() && isInstanced)
 						{
 							// find the difference between the instance positions
@@ -312,7 +312,7 @@ public class MegaserverMod
 						// not using the third int; reserved for future use
 						
 						// experimental implementation for instances
-						isInstanced = ((playerWorldFlags >> 0x1) & 0x1) == 0x1;
+						isInstanced = ((playerWorldFlags >>> 0x1) & 0x1) == 0x1;
 						
 						// profile stats:
 						/*

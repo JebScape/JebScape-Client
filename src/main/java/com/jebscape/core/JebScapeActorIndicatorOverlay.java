@@ -78,7 +78,8 @@ public class JebScapeActorIndicatorOverlay extends Overlay
 							
 							// shift the position to center over the actor
 							FontMetrics metrics = graphics.getFontMetrics(chatFont);
-							textLocation = new Point(textLocation.getX() - (metrics.stringWidth(overheadText) / 2), textLocation.getY());
+							// divide by 2 through bitshift
+							textLocation = new Point(textLocation.getX() - (metrics.stringWidth(overheadText) >>> 1), textLocation.getY());
 							
 							if (textLocation != null)
 							{
@@ -99,7 +100,8 @@ public class JebScapeActorIndicatorOverlay extends Overlay
 							
 							// shift the position to center over the actor
 							FontMetrics metrics = graphics.getFontMetrics(chatFont);
-							textLocation = new Point(textLocation.getX() - (metrics.stringWidth(chatMessage) / 2), textLocation.getY());
+							// divide by 2 through bitshift
+							textLocation = new Point(textLocation.getX() - (metrics.stringWidth(chatMessage) >>> 1), textLocation.getY());
 							
 							if (textLocation != null)
 							{
