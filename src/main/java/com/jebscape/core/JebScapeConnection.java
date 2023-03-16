@@ -85,11 +85,11 @@ public class JebScapeConnection
 		//gameAddress = new InetSocketAddress("192.168.1.148", 43596);
 		//chatAddress = new InetSocketAddress("192.168.1.148", 43597);
 		
-		gameChannel = DatagramChannel.open();
+		gameChannel = DatagramChannel.open(StandardProtocolFamily.INET);
 		gameChannel.configureBlocking(false);
 		gameChannel.bind(null);
 		
-		chatChannel = DatagramChannel.open();
+		chatChannel = DatagramChannel.open(StandardProtocolFamily.INET);
 		chatChannel.configureBlocking(false);
 		chatChannel.bind(null);
 		

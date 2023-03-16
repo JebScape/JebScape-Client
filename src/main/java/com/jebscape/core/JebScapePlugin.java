@@ -68,7 +68,9 @@ public class JebScapePlugin extends Plugin
 		log.info("JebScape has started!");
 		
 		server.init();
-		server.connect();
+		if (!server.connect())
+			log.debug("ERROR: JebScape datagram channel failed to connect.");
+		
 		actorIndicatorOverlay.init(client);
 		minimapOverlay.init(client);
 		overlayManager.add(actorIndicatorOverlay);
