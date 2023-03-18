@@ -93,6 +93,7 @@ public class JebScapePlugin extends Plugin
 			megaserverMod.stop();
 		});
 		
+		overlayManager.remove(minimapOverlay);
 		overlayManager.remove(actorIndicatorOverlay);
 		server.disconnect();
 		
