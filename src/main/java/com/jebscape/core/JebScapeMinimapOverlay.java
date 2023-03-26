@@ -11,7 +11,7 @@ public class JebScapeMinimapOverlay extends Overlay
 {
 	private JebScapeActor[] actors;
 	private Client client;
-	final private Color color = new Color(5, 248, 242, 218);
+	private final Color color = new Color(5, 248, 242, 218);
 	
 	public void init(Client client)
 	{

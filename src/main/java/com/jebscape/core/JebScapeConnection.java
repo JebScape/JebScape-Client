@@ -53,6 +53,8 @@ public class JebScapeConnection
 	private int chatSessionID = -1;
 	private int gameServerPacketsReceived = 0x0000; // 1 bit per server packet
 	private int chatServerPacketsReceived = 0x0000; // 1 bit per server packet
+	private int gameNumOnlinePlayers = 0;
+	private int chatNumOnlinePlayers = 0;
 	
 	private static final int PROTOCOL_VERSION = 1;
 	private static final int EMPTY_PACKET = 0x0;
@@ -230,7 +232,19 @@ public class JebScapeConnection
 			}
 			catch (Exception e)
 			{
-				return false;
+				// it's been observed that connections that sit idle long enough run the risk of being automatically closed, so let's recreate it just in case
+				try
+				{
+					gameChannel = DatagramChannel.open(StandardProtocolFamily.INET);
+					gameChannel.configureBlocking(false);
+					gameChannel.bind(null);
+					gameChannel.connect(gameAddress);
+					success = gameChannel.write(gameClientPacket.buffer) == GAME_CLIENT_PACKET_SIZE;
+				}
+				catch (Exception exception)
+				{
+					return false;
+				}
 			}
 		}
 		
@@ -279,7 +293,18 @@ public class JebScapeConnection
 			}
 			catch (Exception e)
 			{
-				return false;
+				try
+				{
+					chatChannel = DatagramChannel.open(StandardProtocolFamily.INET);
+					chatChannel.configureBlocking(false);
+					chatChannel.bind(null);
+					chatChannel.connect(chatAddress);
+					success = success && chatChannel.write(chatClientPacket.buffer) == CHAT_CLIENT_PACKET_SIZE;
+				}
+				catch (Exception exception)
+				{
+					return false;
+				}
 			}
 		}
 		
@@ -301,13 +326,16 @@ public class JebScapeConnection
 		currentGameTick = 0;
 		lastReceivedGameTick = 0;
 		gameSessionID = -1;
+		gameNumOnlinePlayers = 0;
 	}
+	
 	public void logoutChat()
 	{
 		isChatLoggedIn = false;
 		currentChatTick = 0;
 		lastReceivedChatTick = 0;
 		chatSessionID = -1;
+		chatNumOnlinePlayers = 0;
 	}
 	
 	public long getAccountHash()
@@ -362,6 +390,16 @@ public class JebScapeConnection
 		return currentChatTick;
 	}
 	
+	public int getGameNumOnlinePlayers()
+	{
+		return gameNumOnlinePlayers;
+	}
+	
+	public int getChatNumOnlinePlayers()
+	{
+		return chatNumOnlinePlayers;
+	}
+	
 	// must be 3 ints (12 bytes); in the future, this may be up to 11 ints (44 bytes)
 	public boolean sendGameData(int dataA, int dataB, int dataC, String chatMessage)
 	{
@@ -404,7 +442,19 @@ public class JebScapeConnection
 			}
 			catch (Exception e)
 			{
-				return false;
+				// it's been observed that connections that sit idle long enough run the risk of being automatically closed, so let's recreate it just in case
+				try
+				{
+					gameChannel = DatagramChannel.open(StandardProtocolFamily.INET);
+					gameChannel.configureBlocking(false);
+					gameChannel.bind(null);
+					gameChannel.connect(gameAddress);
+					bytesWritten += gameChannel.write(gameClientPacket.buffer);
+				}
+				catch (Exception exception)
+				{
+					return false;
+				}
 			}
 		}
 		
@@ -450,7 +500,18 @@ public class JebScapeConnection
 			}
 			catch (Exception e)
 			{
-				bytesWritten = 0;
+				try
+				{
+					chatChannel = DatagramChannel.open(StandardProtocolFamily.INET);
+					chatChannel.configureBlocking(false);
+					chatChannel.bind(null);
+					chatChannel.connect(chatAddress);
+					bytesWritten += chatChannel.write(chatClientPacket.buffer);
+				}
+				catch (Exception exception)
+				{
+					return false;
+				}
 			}
 		}
 		
@@ -509,17 +570,17 @@ public class JebScapeConnection
 						isGameLoggedIn = true;
 						isUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
 						gameSessionID = newSessionID;
-						currentGameTick = newTick;
-						lastReceivedGameTick = newTick;
-						// we're not using the remaining bytes of data, so let's just proceed with normal ticking
 					}
-					else if (isGameLoggedIn && newPacketType == GAME_PACKET && gameSessionID == newSessionID)
+					
+					if (isGameLoggedIn && (newPacketType == LOGIN_PACKET || newPacketType == GAME_PACKET) && gameSessionID == newSessionID)
 					{
 						// place the latest tick info here
 						currentGameTick = newTick;
 						lastReceivedGameTick = newTick;
 						gameServerData[newTick][newPacketID].setData(gameServerPacket);
 						numGameServerPacketsSent[newTick] = newNumPacketsSent + 1; // we store in the range of 0-15 to represent 1-16
+						
+						gameNumOnlinePlayers = gameServerData[newTick][newPacketID].subDataBlocks[6][3];
 					}
 				}
 			} while (bytesReceived > 0);
@@ -564,17 +625,17 @@ public class JebScapeConnection
 						isChatLoggedIn = true;
 						//isUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
 						chatSessionID = newSessionID;
-						currentChatTick = newTick;
-						lastReceivedChatTick = newTick;
-						// we're not using the remaining bytes of data, so let's just proceed with normal ticking
 					}
-					else if (isChatLoggedIn && newPacketType == CHAT_PACKET && chatSessionID == newSessionID)
+					
+					if (isChatLoggedIn && (newPacketType == LOGIN_PACKET || newPacketType == CHAT_PACKET) && chatSessionID == newSessionID)
 					{
 						// place the latest tick info here
 						currentChatTick = newTick;
 						lastReceivedChatTick = newTick;
 						chatServerData[newTick][newPacketID].setData(chatServerPacket);
-						numChatServerPacketsSent[newTick] = newNumPacketsSent + 1; // we store in the range of 0-3 to represent 1-4
+						numChatServerPacketsSent[newTick] = newNumPacketsSent + 1; // we store in the range of 0-15 to represent 1-16
+						
+						chatNumOnlinePlayers = chatServerData[newTick][newPacketID].subDataBlocks[6][3];
 					}
 				}
 			} while (bytesReceived > 0);

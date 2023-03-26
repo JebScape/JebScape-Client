@@ -26,7 +26,6 @@ package com.jebscape.core;
 
 import net.runelite.api.*;
 import net.runelite.api.coords.*;
-import net.runelite.api.events.*;
 
 public class JebScapeActor
 {
@@ -40,7 +39,7 @@ public class JebScapeActor
 	private final int MAX_CHAT_MESSAGE_TIME = 6; // number of game ticks that chat message will be visible above player's head
 	private int remainingOverheadChatMessageTime;
 	
-	private class Target
+	private static class Target
 	{
 		public WorldPoint worldDestinationPosition;
 		public LocalPoint localDestinationPosition;
@@ -52,8 +51,9 @@ public class JebScapeActor
 		public boolean isMidPoint;
 		public boolean isInstanced;
 	}
+	
 	private final int MAX_TARGET_QUEUE_SIZE = 10;
-	private Target[] targetQueue = new Target[MAX_TARGET_QUEUE_SIZE];
+	private final Target[] targetQueue = new Target[MAX_TARGET_QUEUE_SIZE];
 	private int currentTargetIndex;
 	private int targetQueueSize;
 	

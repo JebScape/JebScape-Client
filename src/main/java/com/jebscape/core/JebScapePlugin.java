@@ -37,6 +37,7 @@ import net.runelite.client.events.*;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.util.*;
 
 import java.util.*;
 
@@ -154,6 +155,8 @@ public class JebScapePlugin extends Plugin
 		// don't tick anything if not logged into OSRS
 		if (useMegaserverMod && (client.getGameState() == GameState.LOGGED_IN || client.getGameState() == GameState.LOADING))
 		{
+			boolean prevGameLoginStatus = server.isGameLoggedIn();
+			
 			// TODO: Consider processing received data from the JebScape server at a faster pace using onClientTick()
 			server.onGameTick();
 			
@@ -164,15 +167,14 @@ public class JebScapePlugin extends Plugin
 					megaserverMod.stop();
 				
 				// log in as a guest
-				server.login(client.getAccountHash(), 0, client.getLocalPlayer().getName(), false);
+				server.login(client.getAccountHash(), 0, Text.sanitize(client.getLocalPlayer().getName()), false);
 			}
 			else if (client.getAccountHash() == server.getAccountHash())
 			{
 				// since we have a game and chat server, one may still be not logged in, so let's try again
 				if (!server.isChatLoggedIn())
-					server.login(client.getAccountHash(), 0, client.getLocalPlayer().getName(), false);
-				
-				boolean loggedInAsGuest = server.isGuest();
+					server.login(client.getAccountHash(), 0, Text.sanitize(client.getLocalPlayer().getName()), false);
+					
 				int gameDataBytesSent = 0;
 				
 				// we're logged in, let's play!
@@ -180,6 +182,10 @@ public class JebScapePlugin extends Plugin
 					megaserverMod.start();
 				
 				gameDataBytesSent += megaserverMod.onGameTick();
+				
+				// send a chat message if we've just logged in
+				if (prevGameLoginStatus == false)
+					client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Welcome to JebScape! There are currently " + server.getGameNumOnlinePlayers() + " players online.", null);
 			}
 		}
 	}
