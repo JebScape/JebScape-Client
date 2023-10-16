@@ -161,6 +161,7 @@ public class JebScapePlugin extends Plugin
 			megaserverMod.onAnimationChanged(animationChanged);
 	}
 	
+	@Subscribe
 	public void onFakeXpDrop(FakeXpDrop fakeXpDrop)
 	{
 		if (megaserverMod.isActive())
