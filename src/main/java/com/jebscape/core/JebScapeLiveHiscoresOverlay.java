@@ -97,7 +97,10 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 	{
 		// just clear the queue and move immediately to the destination if many ticks behind or if skill suddenly changes
 		if (skillFrameQueueSize >= MAX_SKILL_FRAME_QUEUE_SIZE - 2 || currentSkill != skill)
+		{
+			currentSkill = skill;
 			this.skillFrameQueueSize = 0;
+		}
 			
 		int newSkillFrameIndex = (currentSkillFrameIndex + skillFrameQueueSize++) % MAX_SKILL_FRAME_QUEUE_SIZE;
 		

@@ -456,7 +456,7 @@ public class MegaserverMod
 						Skill trackedSkill = Skill.AGILITY;
 						if (skillType > 0 && skillType <= Skill.values().length) // this should adapt to automatically include Sailing once it releases
 						{
-							trackedSkill = Skill.values()[skillType - 1]; // Overall is skillType 0 and the rest are offset; TODO: we need our own new Skill enum
+							trackedSkill = Skill.values()[skillType - 1]; // Overall is skillType 0 and the rest are offset;
 							validSkillType = true;
 						}
 						
@@ -556,7 +556,7 @@ public class MegaserverMod
 			clientData[0] = clientData[0] | LIVE_HISCORES_STATS_UPDATE_CMD;
 			
 			// TODO: account for Overall or custom skill
-			int skillType = skillTypeToTrack.ordinal();
+			int skillType = skillTypeToTrack.ordinal() + 1; // reserve Overall for 0
 			
 			// TODO: pack monitor player type and value
 			// we are going to pack these slightly differently, with 1 bit per skill
