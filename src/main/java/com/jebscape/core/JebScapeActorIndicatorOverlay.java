@@ -70,7 +70,7 @@ public class JebScapeActorIndicatorOverlay extends Overlay
 					String overheadText = actor.getOverheadText();
 					if (overheadText != null && !overheadText.isEmpty())
 					{
-						Point textLocation = Perspective.localToCanvas(client, actor.getLocalLocation(), client.getPlane(), 250);
+						Point textLocation = Perspective.localToCanvas(client, actor.getLocalLocation(), client.getPlane(), 260);
 						
 						if (textLocation != null)
 						{
