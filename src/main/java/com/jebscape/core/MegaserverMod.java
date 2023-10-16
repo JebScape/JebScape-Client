@@ -551,9 +551,8 @@ public class MegaserverMod
 			// TODO; ***NOTE TO POTENTIAL HACKERS***: ANY ATTEMPTS TO SPOOF LIVE HISCORES DATA WILL RESULT IN A BAN
 			// TODO; FROM JEBSCAPE WITHOUT ANY REFUND FOR YOUR ACCOUNT KEY PURCHASE. YOU HAVE BEEN WARNED. - JEBRIM
 			
-			// replace the command flag sent
-			clientData[0] = clientData[0] & ~MEGASERVER_MOVEMENT_UPDATE_CMD;
-			clientData[0] = clientData[0] | LIVE_HISCORES_STATS_UPDATE_CMD;
+			// update the command flag sent
+			clientData[0] |= LIVE_HISCORES_STATS_UPDATE_CMD;
 			
 			// TODO: account for Overall or custom skill
 			int skillType = skillTypeToTrack.ordinal() + 1; // reserve Overall for 0
