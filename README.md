@@ -7,17 +7,17 @@ As a WIP, a number of systems remain experimental. This is being published to be
 
 Current Mods:
 - Megaserver Mod (cross-world play and chat with others on other worlds)
+- Live Hiscores Mod (see ranks change instantly; enables post-200m training)
 
 ![image](https://user-images.githubusercontent.com/112780479/219288264-7dbbdfea-4a4c-4cd3-b10d-fb49257ef1eb.png)
 
 Future Planned Mods:
-- Live Hiscores Mod (see ranks change instantly; enables post-200m training)
 - Sandbox Mod (place objects in the same world as others)
 - Speedrunning Mod (race against the ghosts of past player speedrun records)
 - Prop Hunt Mod (rightclick object, become object)
 - Tag Mod (chase each other around a custom arena map)
 - JebChess Mod (real-time chess remake)
-- Sailing Skill Mod (train your own skill)
+- Merchanting Skill Mod (train your own skill)
 - Player-Made Worlds Editor Mod (create your own custom mods)
 - Player-Made Worlds Mod (play others' creations)
 

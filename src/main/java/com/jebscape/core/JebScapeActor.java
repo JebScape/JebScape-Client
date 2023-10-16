@@ -36,7 +36,7 @@ public class JebScapeActor
 	private String actorName;
 	private String overheadText;
 	private String chatMessage;
-	private final int MAX_CHAT_MESSAGE_TIME = 6; // number of game ticks that chat message will be visible above player's head
+	private static final int MAX_CHAT_MESSAGE_TIME = 6; // number of game ticks that chat message will be visible above player's head
 	private int remainingOverheadChatMessageTime;
 	
 	private static class Target
@@ -52,7 +52,7 @@ public class JebScapeActor
 		public boolean isInstanced;
 	}
 	
-	private final int MAX_TARGET_QUEUE_SIZE = 10;
+	private static final int MAX_TARGET_QUEUE_SIZE = 10;
 	private final Target[] targetQueue = new Target[MAX_TARGET_QUEUE_SIZE];
 	private int currentTargetIndex;
 	private int targetQueueSize;
@@ -229,7 +229,7 @@ public class JebScapeActor
 		
 		// just clear the queue and move immediately to the destination if many ticks behind
 		if (targetQueueSize >= MAX_TARGET_QUEUE_SIZE - 2)
-			targetQueueSize = 0;
+			this.targetQueueSize = 0;
 		
 		int prevTargetIndex = (currentTargetIndex + targetQueueSize - 1) % MAX_TARGET_QUEUE_SIZE;
 		int newTargetIndex = (currentTargetIndex + targetQueueSize) % MAX_TARGET_QUEUE_SIZE;

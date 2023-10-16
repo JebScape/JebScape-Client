@@ -24,22 +24,23 @@
  */
 package com.jebscape.core;
 
+import com.google.common.eventbus.*;
 import com.google.inject.Provides;
 
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
+import net.runelite.api.widgets.*;
 import net.runelite.api.events.*;
+import net.runelite.client.chat.*;
 import net.runelite.client.callback.*;
-import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.*;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.*;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.*;
-
-import java.util.*;
 
 @Slf4j
 @PluginDescriptor(
@@ -56,12 +57,22 @@ public class JebScapePlugin extends Plugin
 	@Inject
 	private JebScapeMinimapOverlay minimapOverlay;
 	@Inject
+	private JebScapeLiveHiscoresOverlay liveHiscoresOverlay;
+	@Inject
+	private JebScapeAccountKeyOverlay accountKeyOverlay;
+	@Inject
 	private ClientThread clientThread;
 	@Inject
 	private JebScapeConfig config;
+	@Inject
+	private ConfigManager configManager;
+	@Inject
+	private ChatMessageManager chatMessageManager;
 	private JebScapeConnection server = new JebScapeConnection();
 	private MegaserverMod megaserverMod = new MegaserverMod();
 	private boolean useMegaserverMod = true;
+	private boolean useAccountKey = false;
+	private long accountKey = 0;
 	
 	@Override
 	protected void startUp() throws Exception
@@ -74,14 +85,26 @@ public class JebScapePlugin extends Plugin
 		
 		actorIndicatorOverlay.init(client);
 		minimapOverlay.init(client);
+		liveHiscoresOverlay.init(client);
+		accountKeyOverlay.init(client, this);
+		
 		overlayManager.add(actorIndicatorOverlay);
 		overlayManager.add(minimapOverlay);
+		overlayManager.add(liveHiscoresOverlay);
+		overlayManager.add(accountKeyOverlay);
 		
 		clientThread.invoke(() ->
 		{
-			// TODO: Figure out how to read the config key from here so user's selection is persisted
 			useMegaserverMod = true;
-			megaserverMod.init(client, server, actorIndicatorOverlay, minimapOverlay);
+			megaserverMod.init(client, server, actorIndicatorOverlay, minimapOverlay, liveHiscoresOverlay);
+			
+			if (configManager.getConfiguration("jebscape", "hideLiveHiscores", boolean.class))
+				liveHiscoresOverlay.hide();
+			else
+				liveHiscoresOverlay.show();
+			
+			megaserverMod.setLiveHiscoresSkillType(configManager.getConfiguration("jebscape", "selectSkillLiveHiscores", Skill.class));//config.selectSkillLiveHiscores());
+			megaserverMod.setLiveHiscoresStartRank(configManager.getConfiguration("jebscape", "startRankLiveHiscores", int.class));//(config.startRankLiveHiscores());
 		});
 	}
 	
@@ -91,9 +114,14 @@ public class JebScapePlugin extends Plugin
 		clientThread.invoke(() ->
 		{
 			server.logout();
+			megaserverMod.resetPost200mXpAccumulators();
 			megaserverMod.stop();
 		});
 		
+		accountKeyOverlay.cleanup();
+		
+		overlayManager.remove(accountKeyOverlay);
+		overlayManager.remove(liveHiscoresOverlay);
 		overlayManager.remove(minimapOverlay);
 		overlayManager.remove(actorIndicatorOverlay);
 		server.disconnect();
@@ -108,6 +136,9 @@ public class JebScapePlugin extends Plugin
 		if (gameStateChanged.getGameState() != GameState.LOGGED_IN && client.getGameState() != GameState.LOADING)
 		{
 			server.logout();
+			accountKeyOverlay.hide();
+			liveHiscoresOverlay.setContainsData(false);
+			megaserverMod.resetPost200mXpAccumulators();
 		}
 		else if (gameStateChanged.getGameState() != GameState.LOGGED_IN)
 		{
@@ -130,16 +161,60 @@ public class JebScapePlugin extends Plugin
 			megaserverMod.onAnimationChanged(animationChanged);
 	}
 	
-	@Subscribe
-	public void onConfigChanged(ConfigChanged event)
+	public void onFakeXpDrop(FakeXpDrop fakeXpDrop)
 	{
-		if ("megaserver".equals(event.getKey()))
+		if (megaserverMod.isActive())
+			megaserverMod.onFakeXpDrop(fakeXpDrop);
+	}
+	
+	@Subscribe
+	public void onConfigChanged(ConfigChanged configChanged)
+	{
+		if (configChanged.getGroup().contentEquals("jebscape"))
 		{
-			if (Objects.equals(event.getNewValue(), "true"))
-				useMegaserverMod = true;
-			else
-				useMegaserverMod = false;
+			if (configChanged.getKey().contentEquals("hideLiveHiscores"))
+			{
+				if (config.hideLiveHiscores())
+				{
+					liveHiscoresOverlay.hide();
+				}
+				else
+				{
+					liveHiscoresOverlay.show();
+				}
+			}
+			
+			if (configChanged.getKey().contentEquals("selectSkillLiveHiscores"))
+			{
+				megaserverMod.setLiveHiscoresSkillType(config.selectSkillLiveHiscores());
+			}
+			
+			if (configChanged.getKey().contentEquals("startRankLiveHiscores"))
+			{
+				megaserverMod.setLiveHiscoresStartRank(config.startRankLiveHiscores());
+			}
 		}
+	}
+	
+	public void setRSProfileAccountKey(long key)
+	{
+		configManager.setRSProfileConfiguration("JebScape", "JebScapeAccountKey", key ^ client.getAccountHash());
+		
+		// let's relog
+		clientThread.invokeLater(() -> server.logout());
+		
+		// new login session; this also means that their fake xp drops while a guest will not be tracked
+		megaserverMod.resetPost200mXpAccumulators();
+	}
+	
+	public boolean getUseAccountKey()
+	{
+		return useAccountKey;
+	}
+	
+	public void addGameMessage(String message)
+	{
+		clientThread.invokeLater(() -> client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null));
 	}
 	
 	@Subscribe
@@ -149,6 +224,7 @@ public class JebScapePlugin extends Plugin
 		if (!useMegaserverMod && megaserverMod.isActive())
 		{
 			server.logout();
+			megaserverMod.resetPost200mXpAccumulators();
 			megaserverMod.stop();
 		}
 		
@@ -156,6 +232,31 @@ public class JebScapePlugin extends Plugin
 		if (useMegaserverMod && (client.getGameState() == GameState.LOGGED_IN || client.getGameState() == GameState.LOADING))
 		{
 			boolean prevGameLoginStatus = server.isGameLoggedIn();
+			RuneScapeProfileType rsProfileType = RuneScapeProfileType.getCurrent(client);
+			
+			if (!server.isGameLoggedIn() || !server.isChatLoggedIn())
+			{
+				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "JebScapeAccountKey");
+				if (keyConfig != null && rsProfileType == RuneScapeProfileType.STANDARD)
+				{
+					Long key = Long.parseLong(keyConfig);
+					if (key != null)
+					{
+						this.accountKey = key ^ client.getAccountHash();
+						this.useAccountKey = true;
+					}
+					else
+					{
+						this.accountKey = 0;
+						this.useAccountKey = false;
+					}
+				}
+				else
+				{
+					this.accountKey = 0;
+					this.useAccountKey = false;
+				}
+			}
 			
 			// TODO: Consider processing received data from the JebScape server at a faster pace using onClientTick()
 			server.onGameTick();
@@ -167,13 +268,21 @@ public class JebScapePlugin extends Plugin
 					megaserverMod.stop();
 				
 				// log in as a guest
-				server.login(client.getAccountHash(), 0, Text.sanitize(client.getLocalPlayer().getName()), false);
+				server.login(client.getAccountHash(), accountKey, Text.sanitize(client.getLocalPlayer().getName()), useAccountKey);
 			}
 			else if (client.getAccountHash() == server.getAccountHash())
 			{
 				// since we have a game and chat server, one may still be not logged in, so let's try again
 				if (!server.isChatLoggedIn())
-					server.login(client.getAccountHash(), 0, Text.sanitize(client.getLocalPlayer().getName()), false);
+				{
+					server.login(client.getAccountHash(), accountKey, Text.sanitize(client.getLocalPlayer().getName()), useAccountKey);
+					
+					// since chat server isn't yet connected, we shouldn't be receiving any data
+					liveHiscoresOverlay.setContainsData(false);
+					
+					// whether we disconnected or just haven't started yet, this should be reset
+					megaserverMod.resetPost200mXpAccumulators();
+				}
 					
 				int gameDataBytesSent = 0;
 				
@@ -185,9 +294,84 @@ public class JebScapePlugin extends Plugin
 				
 				// send a chat message if we've just logged in
 				if (prevGameLoginStatus == false)
-					client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Welcome to JebScape! There are currently " + server.getGameNumOnlinePlayers() + " players online.", null);
+				{
+					ChatMessageBuilder message = new ChatMessageBuilder();
+					message.append(ChatColorType.NORMAL).append("Welcome to JebScape! There are currently " + server.getGameNumOnlinePlayers() + " players online.");
+					chatMessageManager.queue(QueuedMessage.builder()
+							.type(ChatMessageType.WELCOME)
+							.runeLiteFormattedMessage(message.build())
+							.build());
+					
+					if (server.isGuest())
+					{
+						if (useAccountKey)
+						{
+							// login must've failed if we think we're using it but the server has told us otherwise
+							message = new ChatMessageBuilder();
+							message.append(ChatColorType.HIGHLIGHT).append("Login attempt failed. Invalid account details sent to server. Try again.");
+							chatMessageManager.queue(QueuedMessage.builder()
+									.type(ChatMessageType.GAMEMESSAGE)
+									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=f50202"))
+									.build());
+							
+							// clear config
+							configManager.unsetRSProfileConfiguration("JebScape", "JebScapeAccountKey");
+							this.useAccountKey = false;
+						}
+						
+						if (rsProfileType != RuneScapeProfileType.STANDARD)
+						{
+							message = new ChatMessageBuilder();
+							message.append(ChatColorType.NORMAL).append("You are logged in as a guest. Account key login requires a standard world.");
+							chatMessageManager.queue(QueuedMessage.builder()
+									.type(ChatMessageType.GAMEMESSAGE)
+									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))//"col=12b500"))
+									.build());
+						}
+						else
+						{
+							message = new ChatMessageBuilder();
+							message.append(ChatColorType.HIGHLIGHT).append("You are logged in as a guest. Click here to create an account.");
+							chatMessageManager.queue(QueuedMessage.builder()
+									.type(ChatMessageType.GAMEMESSAGE)
+									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))//"col=12b500"))
+									.build());
+							this.useAccountKey = false;
+						}
+					}
+				}
+				
+				Widget chatWidget = client.getWidget(WidgetInfo.CHATBOX_MESSAGE_LINES);
+				if (chatWidget != null && useAccountKey == false)
+				{
+					for (Widget w: chatWidget.getDynamicChildren())
+					{
+						if (Text.removeTags(w.getText()).contains("You are logged in as a guest. Click here to create an account."))
+						{
+							clientThread.invokeLater(() -> {
+								w.setAction(1, "Create JebScape Account");
+								w.setOnOpListener((JavaScriptCallback) this::clickCreateJebScapeAccount);
+								w.setHasListener(true);
+								w.setNoClickThrough(true);
+								w.revalidate();
+							});
+						} else {
+							clientThread.invokeLater(() -> {
+								w.setHasListener(false);
+								w.setNoClickThrough(false);
+								w.revalidate();
+							});
+						}
+					}
+				}
 			}
 		}
+	}
+	
+	protected void clickCreateJebScapeAccount(ScriptEvent ev)
+	{
+		LinkBrowser.browse("www.patreon.com/jebscape/membership");
+		accountKeyOverlay.show();
 	}
 	
 	@Subscribe

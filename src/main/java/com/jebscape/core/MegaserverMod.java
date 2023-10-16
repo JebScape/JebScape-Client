@@ -30,14 +30,25 @@ import net.runelite.api.events.*;
 import net.runelite.client.util.Text;
 import static net.runelite.api.NpcID.*;
 import java.nio.charset.*;
+import java.util.Arrays;
 
 public class MegaserverMod
 {
-	public final int MEGASERVER_MOVEMENT_UPDATE_CMD = 0x1;
+	public final int MEGASERVER_MOVEMENT_UPDATE_CMD = 0x1; // 0001
+	public final int LIVE_HISCORES_STATS_UPDATE_CMD = 0x2; // 0010
 	private final int MAX_GHOSTS = 64;
+	private static final int NUM_SKILLS = 24; // includes upcoming Sailing skill
+	private int post200mXpAccumulator[] = new int[NUM_SKILLS];
+	private Skill skillTypeToTrack = Skill.AGILITY;
+	private int startRankToTrack = 1;
+	private static final int NUM_RANKS = 5;
+	private String[] liveHiscoresPlayerNames = new String[NUM_RANKS];
+	private int[] liveHiscoresLevels = new int[NUM_RANKS];
+	private int[] liveHiscoresXPs = new int[NUM_RANKS];
 	private boolean isActive = false;
 	private Client client;
 	private JebScapeConnection server;
+	private JebScapeLiveHiscoresOverlay liveHiscoresOverlay;
 	private int[] clientData = new int[3];
 	private Model ghostModel;
 	private JebScapeActor[] ghosts = new JebScapeActor[MAX_GHOSTS];
@@ -46,7 +57,7 @@ public class MegaserverMod
 	private String chatMessageToSend = "";
 	
 	
-	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay, JebScapeMinimapOverlay minimapOverlay)
+	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay, JebScapeMinimapOverlay minimapOverlay, JebScapeLiveHiscoresOverlay liveHiscoresOverlay)
 	{
 		this.client = client;
 		this.server = server;
@@ -59,6 +70,9 @@ public class MegaserverMod
 		
 		indicatorOverlay.setJebScapeActors(ghosts);
 		minimapOverlay.setJebScapeActors(ghosts);
+		
+		this.liveHiscoresOverlay = liveHiscoresOverlay;
+		liveHiscoresOverlay.setContainsData(false);
 	}
 	
 	// must only be called once logged in
@@ -71,9 +85,6 @@ public class MegaserverMod
 		this.isActive = true;
 		
 		loadGhostRenderables();
-		
-		if (!server.isLoggedIn())
-			server.login(client.getAccountHash(), 0, Text.sanitize(client.getLocalPlayer().getName()), false);
 	}
 	
 	public void stop()
@@ -112,9 +123,33 @@ public class MegaserverMod
 		// TODO: check against the local player; maybe checking this earlier will help fix some of our animation issues
 	}
 	
+	public void onFakeXpDrop(FakeXpDrop fakeXpDrop)
+	{
+		Skill skill = fakeXpDrop.getSkill();
+		this.post200mXpAccumulator[skill.ordinal()] += fakeXpDrop.getXp();
+	}
+	
+	public void resetPost200mXpAccumulators()
+	{
+		Arrays.fill(this.post200mXpAccumulator, 0);
+	}
+	
+	public void setLiveHiscoresSkillType(Skill skillType)
+	{
+		this.skillTypeToTrack = skillType;
+	}
+	
+	public void setLiveHiscoresStartRank(int startRank)
+	{
+		this.startRankToTrack = startRank;
+	}
+	
 	// returns number of game data bytes sent
 	public int onGameTick()
 	{
+		// must occur before packets are unpacked
+		liveHiscoresOverlay.onGameTick();
+		
 		// analyze most recent data received from the server
 		JebScapeServerData[][] gameServerData = server.getRecentGameServerData();
 		JebScapeServerData[][] chatServerData = server.getRecentChatServerData();
@@ -145,6 +180,7 @@ public class MegaserverMod
 					int playerWorldLocationX = 0;
 					int playerWorldLocationY = 0;
 					int playerWorldLocationPlane = 0;
+					int playerAnimationState = 0;
 					boolean isInstanced = false;
 					
 					// let's initialize our player position data
@@ -168,7 +204,7 @@ public class MegaserverMod
 						playerWorldLocationX = (data.coreData[1] & 0xFFFF);				// 16/32 bits
 						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);	// 32/32 bits
 						
-						// not using the third int; reserved for future use
+						playerAnimationState = data.coreData[2];
 						
 						// experimental implementation for instances
 						isInstanced = ((playerWorldFlags >>> 0x1) & 0x1) == 0x1;
@@ -281,11 +317,13 @@ public class MegaserverMod
 					JebScapeServerData data = chatServerData[chatTick][packetID];
 					boolean emptyPacket = data.isEmpty();
 					boolean containsMegaserverCmd = false;
+					boolean containsLiveHiscoresCmd = false;
 					int playerWorldFlags = 0;
 					int playerWorld = 0;
 					int playerWorldLocationX = 0;
 					int playerWorldLocationY = 0;
 					int playerWorldLocationPlane = 0;
+					int playerAnimationState = 0;
 					boolean isInstanced = false;
 					
 					// let's initialize our player position data
@@ -300,6 +338,8 @@ public class MegaserverMod
 						// 2 bits plane
 						containsMegaserverCmd = ((data.coreData[0] & 0xFF) & // bitflag, so let's just test the one bit
 								MEGASERVER_MOVEMENT_UPDATE_CMD) != 0;	// 8/32 bits
+						containsLiveHiscoresCmd = ((data.coreData[0] & 0xFF) & // bitflag, so let's just test the one bit
+								LIVE_HISCORES_STATS_UPDATE_CMD) != 0;	// 8/32 bits
 						playerWorldFlags = (data.coreData[0] >>> 8) & 0xFF;				// 16/32 bits
 						playerWorld = (data.coreData[0] >>> 16) & 0x3FFF;				// 30/32 bits
 						playerWorldLocationPlane = (data.coreData[0] >>> 30) & 0x3; 	// 32/32 bits
@@ -307,7 +347,9 @@ public class MegaserverMod
 						// 16 bits world X position
 						// 16 bits world Y position
 						playerWorldLocationX = (data.coreData[1] & 0xFFFF);				// 16/32 bits
-						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);	// 32/32 bits
+						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);	// 32/32
+						
+						playerAnimationState = data.coreData[2];
 						
 						// not using the third int; reserved for future use
 						
@@ -327,6 +369,7 @@ public class MegaserverMod
 						//*/
 					}
 					
+					// contains chat messages
 					if (containsMegaserverCmd && playerWorld == client.getWorld())
 					{
 						// extract chat message
@@ -377,6 +420,76 @@ public class MegaserverMod
 							}
 						}
 					}
+					
+					// contains live hiscores data
+					if (containsLiveHiscoresCmd)
+					{
+						// player coreData contains info on the current monitored player rather than oneself
+						
+						// unpack the sub data
+						// 3 bits monitoredPlayerRankOffset (ranks 0-4; all 1 bits mean none is monitored)
+						// 17 bits startingRank (the ranks we pass down are offset by this)
+						// 12 bits liveHiscoresLevels[0]
+						int monitoredPlayerRankOffset = data.subDataBlocks[0][0] & 0x7;			// 3/32 bits
+						int startRank = (data.subDataBlocks[0][0] >>> 3) & 0x1FFFF;				// 20/32 bits
+						liveHiscoresLevels[0] = (data.subDataBlocks[0][0] >>> 20) & 0xFFF;		// 32/32 bits
+						
+						// 12 bits liveHiscoresLevels[1]
+						// 12 bits liveHiscoresLevels[2]
+						// 8 bits reserved
+						liveHiscoresLevels[1] = data.subDataBlocks[0][1] & 0xFFF;				// 12/32 bits
+						liveHiscoresLevels[2] = (data.subDataBlocks[0][1] >>> 12) & 0xFFF;		// 24/32 bits
+						
+						// 12 bits liveHiscoresLevels[3]
+						// 12 bits liveHiscoresLevels[4]
+						// 8 bits reserved
+						liveHiscoresLevels[3] = data.subDataBlocks[0][2] & 0xFFF;				// 12/32 bits
+						liveHiscoresLevels[4] = (data.subDataBlocks[0][2] >>> 12) & 0xFFF;		// 24/32 bits
+						
+						// 7 bits skill type (technically only need 5; potential future support for many more skills)
+						// 25 bits for upperXPs; 5 bits each (reserved future support for Overall)
+						// 2 bits reserved
+						int skillType = data.subDataBlocks[0][3] & 0x7F;						// 7/32 bits
+						// TODO: set 5 upperXPs[]
+						
+						boolean validSkillType = false;
+						Skill trackedSkill = Skill.AGILITY;
+						if (skillType > 0 && skillType <= Skill.values().length) // this should adapt to automatically include Sailing once it releases
+						{
+							trackedSkill = Skill.values()[skillType - 1]; // Overall is skillType 0 and the rest are offset; TODO: we need our own new Skill enum
+							validSkillType = true;
+						}
+						
+						if (validSkillType)
+						{
+							for (int j = 0; j < NUM_RANKS; j++)
+							{
+								liveHiscoresXPs[j] = data.subDataBlocks[j + 1][0] & 0x7FFFFFFF; // 31/32 bits
+								// 32nd bit reserved for online status
+								
+								nameBytes[0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
+								nameBytes[1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
+								nameBytes[2] = (byte)((data.subDataBlocks[j + 1][1] >>> 16) & 0xFF);
+								nameBytes[3] = (byte)((data.subDataBlocks[j + 1][1] >>> 24) & 0xFF);
+								
+								nameBytes[4] = (byte)(data.subDataBlocks[j + 1][2] & 0xFF);
+								nameBytes[5] = (byte)((data.subDataBlocks[j + 1][2] >>> 8) & 0xFF);
+								nameBytes[6] = (byte)((data.subDataBlocks[j + 1][2] >>> 16) & 0xFF);
+								nameBytes[7] = (byte)((data.subDataBlocks[j + 1][2] >>> 24) & 0xFF);
+								
+								nameBytes[8] = (byte)(data.subDataBlocks[j + 1][3] & 0xFF);
+								nameBytes[9] = (byte)((data.subDataBlocks[j + 1][3] >>> 8) & 0xFF);
+								nameBytes[10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
+								nameBytes[11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
+								
+								liveHiscoresPlayerNames[j] = new String(nameBytes, StandardCharsets.UTF_8).trim();
+							}
+							
+							liveHiscoresOverlay.updateSkillHiscoresData(trackedSkill, startRank, liveHiscoresPlayerNames, liveHiscoresLevels, liveHiscoresXPs);
+						}
+						
+						// TODO: replace profile data in subDataBlocks[6] with the skill type and name of the nearby rank 1 player, cycling through over multiple packets any others that might also be in the area
+					}
 				}
 			}
 		}
@@ -424,15 +537,75 @@ public class MegaserverMod
 		clientData[2] |= (isInteracting ? 0x1 : 0x0) << 30;		// 31/32 bits
 		clientData[2] |= (isPoseAnimation ? 0x1 : 0x0) << 31;	// 32/32 bits
 		
-		String chatMessage = "";
+		byte[] extraChatData = new byte[96];
+		
 		// check if we've recently sent a chat message
 		if (!chatMessageToSend.isEmpty())
 		{
-			chatMessage = chatMessageToSend;
+			extraChatData = chatMessageToSend.getBytes(StandardCharsets.UTF_8);
+			
 			this.chatMessageToSend = ""; // we only want to send it once
 		}
+		else
+		{
+			// TODO; ***NOTE TO POTENTIAL HACKERS***: ANY ATTEMPTS TO SPOOF LIVE HISCORES DATA WILL RESULT IN A BAN
+			// TODO; FROM JEBSCAPE WITHOUT ANY REFUND FOR YOUR ACCOUNT KEY PURCHASE. YOU HAVE BEEN WARNED. - JEBRIM
+			
+			// replace the command flag sent
+			clientData[0] = clientData[0] & ~MEGASERVER_MOVEMENT_UPDATE_CMD;
+			clientData[0] = clientData[0] | LIVE_HISCORES_STATS_UPDATE_CMD;
+			
+			// TODO: account for Overall or custom skill
+			int skillType = skillTypeToTrack.ordinal();
+			
+			// TODO: pack monitor player type and value
+			// we are going to pack these slightly differently, with 1 bit per skill
+			int userInputDataA = 0; // reserved for custom JebScape skill
+			int userInputDataB = 0; // reserved for upper bits of custom JebScape skill & monitored player data
+			int userInputDataC = startRankToTrack & 0x1FFFF;	// 17/24 bits
+			userInputDataC |= (skillType & 0x7F) << 17;			// 24/24 bits
+			
+			if (!server.isGuest()) // authenticated; TODO: do we want to split this check between game and chat servers?
+			{
+				// if we're not sending a chat message this tick, then let's send a stat update for the hiscores
+				Skill skills[] = Skill.values();
+				final int numSkills = skills.length;
+				for (int i = 0; i < numSkills; i++)
+				{
+					int xp = client.getSkillExperience(skills[i]);
+					if (xp == 200000000) // if maxed out
+					{
+						// let's include our accumulated fake xp drops; clamp it to be safe from buffer overflows
+						post200mXpAccumulator[i] = Math.max(0, Math.min(336870911, post200mXpAccumulator[i])); // 2^29 - 1 - 200m
+						xp += post200mXpAccumulator[i];
+						
+						// if we surpass 300m xp gained within a single login session, reset back to 0 to avoid risking a buffer overflow
+						// the server has comparable behavior and will log the player out, persisting the gains from the current session in the process
+						if (post200mXpAccumulator[i] > 300000000)
+						{
+							resetPost200mXpAccumulators();
+						}
+					}
+					
+					xp = (xp & 0x1FFFFFFF); // use only 29 bits
+					
+					extraChatData[i * 4] = (byte)(xp);          	// 8/32 bits
+					extraChatData[i * 4 + 1] = (byte)(xp >>> 8);	// 16/32 bits
+					extraChatData[i * 4 + 2] = (byte)(xp >>> 16);	// 24/32 bits
+					extraChatData[i * 4 + 3] = (byte)(xp >>> 24);	// 29/32 bits
+				}
+			}
+			
+			for (int i = 0; i < NUM_SKILLS; i++)
+			{
+				// we have 3 bits to spare per skill, let's pack them in one at a time
+				extraChatData[i * 4 + 3] |= (byte)(((userInputDataA >>> i) & 0x1) << 5);    // 30/32 bits
+				extraChatData[i * 4 + 3] |= (byte)(((userInputDataB >>> i) & 0x1) << 6);    // 31/32 bits
+				extraChatData[i * 4 + 3] |= (byte)(((userInputDataC >>> i) & 0x1) << 7);    // 32/32 bits
+			}
+		}
 		
-		return server.sendGameData(clientData[0], clientData[1], clientData[2], chatMessage) ? 12 : 0; // 3 * 4-byte ints = 12 bytes
+		return server.sendGameData(clientData[0], clientData[1], clientData[2], extraChatData) ? 12 : 0; // 3 * 4-byte ints = 12 bytes
 	}
 	
 	public void onClientTick(ClientTick clientTick)

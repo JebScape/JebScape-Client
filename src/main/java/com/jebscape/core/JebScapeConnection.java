@@ -48,7 +48,7 @@ public class JebScapeConnection
 	private long accountHash;
 	private long accountKey;
 	private boolean isUsingKey;
-	private static final byte[] EMPTY_STRING = new byte[80];
+	private static final byte[] EMPTY_BYTES = new byte[96];
 	private int gameSessionID = -1;
 	private int chatSessionID = -1;
 	private int gameServerPacketsReceived = 0x0000; // 1 bit per server packet
@@ -186,17 +186,17 @@ public class JebScapeConnection
 			
 		if (!gameChannel.isConnected() || !chatChannel.isConnected() || accountName.length() > 12)
 			return false;
-			
+		
 		this.accountHash = accountHash; // 8 bytes
 		this.accountKey = accountKey; // 8 bytes
 		this.isUsingKey = useKey;
-		gameServerPacketsReceived = 0xFFFF;
-		chatServerPacketsReceived = 0xFFFF;
 		
 		boolean success = true;
 		
 		if (!isGameLoggedIn)
 		{
+			gameServerPacketsReceived = 0xFFFF;
+			
 			// set the header
 			// 2 bits login identifier
 			// 17 bits last known game session id
@@ -221,7 +221,7 @@ public class JebScapeConnection
 				gameClientPacket.buffer.putLong(accountKey);									// 20/64 bytes
 				gameClientPacket.buffer.put(nameBytes, 0, strLen);						// up to 32/64 bytes
 				if (strLen < 12)
-					gameClientPacket.buffer.put(EMPTY_STRING, 0, 12 - strLen);		// 32/64 bytes
+					gameClientPacket.buffer.put(EMPTY_BYTES, 0, 12 - strLen);		// 32/64 bytes
 				gameClientPacket.buffer.putLong(reserved);										// 40/64 bytes
 				gameClientPacket.buffer.putLong(reserved);										// 48/64 bytes
 				gameClientPacket.buffer.putLong(reserved);										// 56/64 bytes
@@ -250,6 +250,8 @@ public class JebScapeConnection
 		
 		if (!isChatLoggedIn)
 		{
+			chatServerPacketsReceived = 0xFFFF;
+			
 			// set the header
 			// 2 bits login identifier
 			// 17 bits last known game session id
@@ -274,7 +276,7 @@ public class JebScapeConnection
 				chatClientPacket.buffer.putLong(accountKey);									// 20/128 bytes
 				chatClientPacket.buffer.put(nameBytes, 0, strLen);						// up to 32/128 bytes
 				if (strLen < 12)
-					chatClientPacket.buffer.put(EMPTY_STRING, 0, 12 - strLen);		// 32/128 bytes
+					chatClientPacket.buffer.put(EMPTY_BYTES, 0, 12 - strLen);		// 32/128 bytes
 				chatClientPacket.buffer.putLong(reserved);										// 40/129 bytes
 				chatClientPacket.buffer.putLong(reserved);										// 48/128 bytes
 				chatClientPacket.buffer.putLong(reserved);										// 56/129 bytes
@@ -400,8 +402,8 @@ public class JebScapeConnection
 		return chatNumOnlinePlayers;
 	}
 	
-	// must be 3 ints (12 bytes); in the future, this may be up to 11 ints (44 bytes)
-	public boolean sendGameData(int dataA, int dataB, int dataC, String chatMessage)
+	// must be 3 ints (12 bytes); extraChatData is limited to size of 96 bytes (24 ints)
+	public boolean sendGameData(int dataA, int dataB, int dataC, byte[] extraChatData)
 	{
 		if (!gameChannel.isConnected() || !chatChannel.isConnected())
 			return false;
@@ -472,12 +474,10 @@ public class JebScapeConnection
 			packetHeader |= (currentChatTick & 0xF) << 20;		// 24/32 bits
 			packetHeader |= 0xFF << 24;							// 32/32 bits
 			
-			byte[] chatMessageBytes = chatMessage.getBytes(StandardCharsets.UTF_8);
-			int strLen = chatMessage.length();
-			
+			int bytesLength = extraChatData.length;
 			// cut it short if too long
-			if (strLen > 80)
-				strLen = 80;
+			if (bytesLength > 96)
+				bytesLength = 96;
 			
 			try
 			{
@@ -488,12 +488,10 @@ public class JebScapeConnection
 				chatClientPacket.buffer.putInt(dataA);											// 24/128 bytes
 				chatClientPacket.buffer.putInt(dataB);											// 28/128 bytes
 				chatClientPacket.buffer.putInt(dataC);											// 32/128 bytes
-				if (strLen > 0)
-					chatClientPacket.buffer.put(chatMessageBytes, 0, strLen);				// up to 112/128 bytes
-				if (strLen < 80)
-					chatClientPacket.buffer.put(EMPTY_STRING, 0, 80 - strLen);		// 112/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 120/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 128/128 bytes
+				if (bytesLength > 0)
+					chatClientPacket.buffer.put(extraChatData, 0, bytesLength);			// up to 128/128 bytes
+				if (bytesLength < 96)
+					chatClientPacket.buffer.put(EMPTY_BYTES, 0, 96 - bytesLength);	// 128/128 bytes
 				chatClientPacket.buffer.rewind();
 				
 				bytesWritten += chatChannel.write(chatClientPacket.buffer);
@@ -623,7 +621,7 @@ public class JebScapeConnection
 					{
 						// we've received an ACK from the server for our login request
 						isChatLoggedIn = true;
-						//isUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
+						//isUsingKey = newIsUsingKey; // don't let chat server potentially overwrite results from game server; TODO: if these differ, that means someone else probably took their account, so maybe inform user
 						chatSessionID = newSessionID;
 					}
 					

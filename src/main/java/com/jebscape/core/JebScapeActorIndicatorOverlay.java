@@ -92,7 +92,7 @@ public class JebScapeActorIndicatorOverlay extends Overlay
 					String chatMessage = actor.getChatMessage();
 					if (chatMessage != null && !chatMessage.isEmpty())
 					{
-						Point textLocation = Perspective.localToCanvas(client, actor.getLocalLocation(), client.getPlane(), 210);
+						Point textLocation = Perspective.localToCanvas(client, actor.getLocalLocation(), client.getPlane(), 225);
 						
 						if (textLocation != null)
 						{
