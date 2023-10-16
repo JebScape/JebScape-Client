@@ -43,6 +43,7 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 	private String[] currentPlayerNames;
 	private int[] currentLevels;
 	private int[] currentXPs;
+	private boolean[] currentOnlineStatuses;
 	private boolean containsData;
 	
 	private static class SkillFrame
@@ -52,6 +53,7 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 		private String[] playerNames;
 		private int[] levels;
 		private int[] XPs;
+		private boolean[] onlineStatuses;
 	}
 	
 	private final int MAX_SKILL_FRAME_QUEUE_SIZE = 10;
@@ -64,7 +66,8 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 	@Inject
 	private TooltipManager tooltipManager;
 	private Client client;
-	private final Color color = new Color(5, 248, 242, 218);
+	private final Color headerColor = new Color(5, 248, 242, 218);
+	private final Color onlineColor = new Color(5, 248, 5, 218);
 	private final Tooltip guestTooltip = new Tooltip("Requires JebScape account to participate. See JebScape settings to configure.");
 	private final Tooltip accountTooltip = new Tooltip("See JebScape settings to configure.");
 	private boolean isVisible;
@@ -93,7 +96,7 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 		return isVisible;
 	}
 	
-	public void updateSkillHiscoresData(Skill skill, int startRank, String[] playerNames, int[] levels, int[] XPs)
+	public void updateSkillHiscoresData(Skill skill, int startRank, String[] playerNames, int[] levels, int[] XPs, boolean[] onlineStatuses)
 	{
 		// just clear the queue and move immediately to the destination if many ticks behind or if skill suddenly changes
 		if (skillFrameQueueSize >= MAX_SKILL_FRAME_QUEUE_SIZE - 2 || currentSkill != skill)
@@ -110,6 +113,7 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 		skillFrameQueue[newSkillFrameIndex].playerNames = playerNames;
 		skillFrameQueue[newSkillFrameIndex].levels = levels;
 		skillFrameQueue[newSkillFrameIndex].XPs = XPs;
+		skillFrameQueue[newSkillFrameIndex].onlineStatuses = onlineStatuses;
 		
 		setContainsData(true);
 	}
@@ -124,6 +128,7 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 			currentPlayerNames = skillFrameQueue[currentSkillFrameIndex].playerNames;
 			currentLevels = skillFrameQueue[currentSkillFrameIndex].levels;
 			currentXPs = skillFrameQueue[currentSkillFrameIndex].XPs;
+			currentOnlineStatuses = skillFrameQueue[currentSkillFrameIndex].onlineStatuses;
 			
 			// move forward head of queue
 			currentSkillFrameIndex = (currentSkillFrameIndex + 1) % MAX_SKILL_FRAME_QUEUE_SIZE;
@@ -157,13 +162,13 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 		getPanelComponent().getChildren().add(
 				TitleComponent.builder()
 						.text("JebScape Live Hiscores")
-						.color(color)
+						.color(headerColor)
 						.build());
 		
 		getPanelComponent().getChildren().add(
 				TitleComponent.builder()
 						.text(currentSkill.getName())
-						.color(color)
+						.color(headerColor)
 						.build());
 		
 		RuneLiteTableComponent liveHiscoresTable = new RuneLiteTableComponent();
@@ -175,10 +180,10 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 				RuneLiteTableComponent.TableAlignment.RIGHT);
 		
 		liveHiscoresTable.addRow(
-				ColorUtil.prependColorTag(RANK_COLUMN_HEADER, color),
-				ColorUtil.prependColorTag(NAME_COLUMN_HEADER, color),
-				ColorUtil.prependColorTag(LEVEL_COLUMN_HEADER, color),
-				ColorUtil.prependColorTag(XP_COLUMN_HEADER, color));
+				ColorUtil.prependColorTag(RANK_COLUMN_HEADER, headerColor),
+				ColorUtil.prependColorTag(NAME_COLUMN_HEADER, headerColor),
+				ColorUtil.prependColorTag(LEVEL_COLUMN_HEADER, headerColor),
+				ColorUtil.prependColorTag(XP_COLUMN_HEADER, headerColor));
 		
 		for (int i = 0; i < currentXPs.length; ++i)
 		{
@@ -187,13 +192,24 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 				currentPlayerNames[i] = "[No Player Ranked]";
 			}
 			
-			liveHiscoresTable.addRow(
-					Integer.toString(currentStartRank + i),
-					currentPlayerNames[i],
-					Integer.toString(currentLevels[i]),
-					String.format("%,d", currentXPs[i])
-			);
-			//ColorUtil.prependColorTag(Integer.toString(playerSkillLevel), color) // TODO: use this to color green those players that are online
+			if (currentOnlineStatuses[i])
+			{
+				liveHiscoresTable.addRow(
+						ColorUtil.prependColorTag(Integer.toString(currentStartRank + i), onlineColor),
+						ColorUtil.prependColorTag(currentPlayerNames[i], onlineColor),
+						ColorUtil.prependColorTag(Integer.toString(currentLevels[i]), onlineColor),
+						ColorUtil.prependColorTag(String.format("%,d", currentXPs[i]), onlineColor)
+				);
+			}
+			else
+			{
+				liveHiscoresTable.addRow(
+						Integer.toString(currentStartRank + i),
+						currentPlayerNames[i],
+						Integer.toString(currentLevels[i]),
+						String.format("%,d", currentXPs[i])
+				);
+			}
 		}
 		
 		getPanelComponent().getChildren().add(liveHiscoresTable);

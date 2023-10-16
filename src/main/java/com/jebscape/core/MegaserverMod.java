@@ -45,6 +45,7 @@ public class MegaserverMod
 	private String[] liveHiscoresPlayerNames = new String[NUM_RANKS];
 	private int[] liveHiscoresLevels = new int[NUM_RANKS];
 	private int[] liveHiscoresXPs = new int[NUM_RANKS];
+	private boolean[] liveHiscoresOnlineStatuses = new boolean[NUM_RANKS];
 	private boolean isActive = false;
 	private Client client;
 	private JebScapeConnection server;
@@ -464,8 +465,8 @@ public class MegaserverMod
 						{
 							for (int j = 0; j < NUM_RANKS; j++)
 							{
-								liveHiscoresXPs[j] = data.subDataBlocks[j + 1][0] & 0x7FFFFFFF; // 31/32 bits
-								// 32nd bit reserved for online status
+								liveHiscoresXPs[j] = data.subDataBlocks[j + 1][0] & 0x7FFFFFFF;					// 31/32 bits
+								liveHiscoresOnlineStatuses[j] = ((data.subDataBlocks[j + 1][0] >>> 31) == 0x1);	// 32/32 bits
 								
 								nameBytes[0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
 								nameBytes[1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
@@ -485,7 +486,7 @@ public class MegaserverMod
 								liveHiscoresPlayerNames[j] = new String(nameBytes, StandardCharsets.UTF_8).trim();
 							}
 							
-							liveHiscoresOverlay.updateSkillHiscoresData(trackedSkill, startRank, liveHiscoresPlayerNames, liveHiscoresLevels, liveHiscoresXPs);
+							liveHiscoresOverlay.updateSkillHiscoresData(trackedSkill, startRank, liveHiscoresPlayerNames, liveHiscoresLevels, liveHiscoresXPs, liveHiscoresOnlineStatuses);
 						}
 						
 						// TODO: replace profile data in subDataBlocks[6] with the skill type and name of the nearby rank 1 player, cycling through over multiple packets any others that might also be in the area
@@ -578,8 +579,9 @@ public class MegaserverMod
 						post200mXpAccumulator[i] = Math.max(0, Math.min(336870911, post200mXpAccumulator[i])); // 2^29 - 1 - 200m
 						xp += post200mXpAccumulator[i];
 						
-						// if we surpass 300m xp gained within a single login session, reset back to 0 to avoid risking a buffer overflow
-						// the server has comparable behavior and will log the player out, persisting the gains from the current session in the process
+						// if we surpass 300m xp gained within a single login session, reset back to 0 to avoid risking an uncontrolled buffer overflow
+						// the server has comparable behavior, so as long as this one packet doesn't get lost, we should be okay...
+						// I would still advise the player log out before 300m xp is gained in a single session just in case
 						if (post200mXpAccumulator[i] > 300000000)
 						{
 							resetPost200mXpAccumulators();
