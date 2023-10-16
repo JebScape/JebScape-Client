@@ -22,10 +22,13 @@ Future Planned Mods:
 - Player-Made Worlds Mod (play others' creations)
 
 
+Create an Account: https://www.patreon.com/jebscape/membership
+
 Join Our Discord: https://discord.gg/TutGntk5Wr
 
 Donate on Patreon: https://www.patreon.com/jebscape
 
-View our Source: http://www.jebscape.com
+View our Source: https://github.com/JebScape/JebScape-Client
+
 
 -Jebrim
