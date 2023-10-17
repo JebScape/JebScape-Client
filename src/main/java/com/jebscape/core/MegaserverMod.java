@@ -83,6 +83,12 @@ public class MegaserverMod
 		if (isActive)
 			stop();
 		
+		if (!server.isChatLoggedIn())
+		{
+			liveHiscoresOverlay.setContainsData(false);
+			resetPost200mXpAccumulators();
+		}
+		
 		this.isActive = true;
 		
 		loadGhostRenderables();
@@ -95,6 +101,12 @@ public class MegaserverMod
 		
 		this.isActive = false;
 		this.chatMessageToSend = "";
+		
+		if (!server.isChatLoggedIn())
+		{
+			liveHiscoresOverlay.setContainsData(false);
+			resetPost200mXpAccumulators();
+		}
 		
 		for (int i = 0; i < MAX_GHOSTS; i++)
 			ghosts[i].despawn();
