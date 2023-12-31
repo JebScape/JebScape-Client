@@ -345,6 +345,8 @@ public class JebScapeConnection
 		return accountHash;
 	}
 	
+	public long getAccountKey() { return accountKey; }
+	
 	public boolean isGuest()
 	{
 		return isGameLoggedIn && !isUsingKey;
@@ -562,23 +564,32 @@ public class JebScapeConnection
 					int newNumPacketsSent = (packetHeader >>> 24) & 0xF;			// 28/32 bits
 					int newPacketID = (packetHeader >>> 28) & 0xF;					// 32/32 bits
 					
-					if (newPacketType == LOGIN_PACKET)
+					if (!isGameLoggedIn && newPacketType == LOGIN_PACKET)
 					{
 						// we've received an ACK from the server for our login request
-						isGameLoggedIn = true;
-						isUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
-						gameSessionID = newSessionID;
+						this.isGameLoggedIn = true;
+						this.isUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
+						this.gameSessionID = newSessionID;
+						
+						if (newIsUsingKey)
+						{
+							this.accountKey = gameServerPacket.buffer.getLong();
+							gameServerPacket.buffer.rewind();
+							gameServerPacket.buffer.getInt(); // bring us back to where we started
+						}
+						
+						// place the initial tick timing info here to serve as a baseline
+						this.currentGameTick = newTick;
+						this.lastReceivedGameTick = newTick;
 					}
 					
 					if (isGameLoggedIn && (newPacketType == LOGIN_PACKET || newPacketType == GAME_PACKET) && gameSessionID == newSessionID)
 					{
 						// place the latest tick info here
-						currentGameTick = newTick;
-						lastReceivedGameTick = newTick;
 						gameServerData[newTick][newPacketID].setData(gameServerPacket);
 						numGameServerPacketsSent[newTick] = newNumPacketsSent + 1; // we store in the range of 0-15 to represent 1-16
 						
-						gameNumOnlinePlayers = gameServerData[newTick][newPacketID].subDataBlocks[6][3];
+						this.gameNumOnlinePlayers = gameServerData[newTick][newPacketID].subDataBlocks[6][3];
 					}
 				}
 			} while (bytesReceived > 0);
@@ -617,23 +628,24 @@ public class JebScapeConnection
 					int newNumPacketsSent = (packetHeader >>> 24) & 0xF;			// 28/32 bits
 					int newPacketID = (packetHeader >>> 28) & 0xF;					// 32/32 bits
 					
-					if (newPacketType == LOGIN_PACKET)
+					if (!isChatLoggedIn && newPacketType == LOGIN_PACKET)
 					{
 						// we've received an ACK from the server for our login request
-						isChatLoggedIn = true;
-						//isUsingKey = newIsUsingKey; // don't let chat server potentially overwrite results from game server; TODO: if these differ, that means someone else probably took their account, so maybe inform user
-						chatSessionID = newSessionID;
+						this.isChatLoggedIn = true;
+						this.chatSessionID = newSessionID;
+						
+						// place the initial tick timing info here to serve as a baseline
+						this.currentChatTick = newTick;
+						this.lastReceivedChatTick = newTick;
 					}
 					
 					if (isChatLoggedIn && (newPacketType == LOGIN_PACKET || newPacketType == CHAT_PACKET) && chatSessionID == newSessionID)
 					{
 						// place the latest tick info here
-						currentChatTick = newTick;
-						lastReceivedChatTick = newTick;
 						chatServerData[newTick][newPacketID].setData(chatServerPacket);
 						numChatServerPacketsSent[newTick] = newNumPacketsSent + 1; // we store in the range of 0-15 to represent 1-16
 						
-						chatNumOnlinePlayers = chatServerData[newTick][newPacketID].subDataBlocks[6][3];
+						this.chatNumOnlinePlayers = chatServerData[newTick][newPacketID].subDataBlocks[6][3];
 					}
 				}
 			} while (bytesReceived > 0);
@@ -655,21 +667,21 @@ public class JebScapeConnection
 				int tick = (prevReceivedGameTick + i) % TICKS_UNTIL_LOGOUT;
 				if (numGameServerPacketsSent[tick] > 0)
 				{
-					currentGameTick = tick;
-					lastReceivedGameTick = tick;
+					this.currentGameTick = tick;
+					this.lastReceivedGameTick = tick;
 				}
 			}
 			
 			// let's analyze what packets are missing from the most recent game tick received
 			// TODO: not currently used; reanalyze to determine if this is necessary
-			gameServerPacketsReceived = 0;
+			this.gameServerPacketsReceived = 0;
 			if (numGameServerPacketsSent[lastReceivedGameTick] > 0)
 				for (int packetID = 0; packetID < GAME_SERVER_PACKETS_PER_TICK; packetID++)
-					gameServerPacketsReceived = (!gameServerData[lastReceivedGameTick][packetID].isEmpty() ? 0x1 : 0x0) << packetID;
+					this.gameServerPacketsReceived = (!gameServerData[lastReceivedGameTick][packetID].isEmpty() ? 0x1 : 0x0) << packetID;
 			
 			// increment current tick to prepare for the next payload
 			// the gap between currentGameTick and lastReceivedGameTick shall grow if no packets are received
-			currentGameTick = (currentGameTick + 1) % TICKS_UNTIL_LOGOUT;
+			this.currentGameTick = (currentGameTick + 1) % TICKS_UNTIL_LOGOUT;
 			
 			// if we've cycled around back to the beginning, we've timed out
 			if (currentGameTick == lastReceivedGameTick)
@@ -688,17 +700,17 @@ public class JebScapeConnection
 				int tick = (prevReceivedChatTick + i) % TICKS_UNTIL_LOGOUT;
 				if (numChatServerPacketsSent[tick] > 0)
 				{
-					currentChatTick = tick;
-					lastReceivedChatTick = tick;
+					this.currentChatTick = tick;
+					this.lastReceivedChatTick = tick;
 				}
 			}
 			
-			chatServerPacketsReceived = 0;
+			this.chatServerPacketsReceived = 0;
 			if (numChatServerPacketsSent[lastReceivedChatTick] > 0)
 				for (int packetID = 0; packetID < CHAT_SERVER_PACKETS_PER_TICK; packetID++)
-					chatServerPacketsReceived = (!chatServerData[lastReceivedChatTick][packetID].isEmpty() ? 0x1 : 0x0) << packetID;
+					this.chatServerPacketsReceived = (!chatServerData[lastReceivedChatTick][packetID].isEmpty() ? 0x1 : 0x0) << packetID;
 			
-			currentChatTick = (currentChatTick + 1) % TICKS_UNTIL_LOGOUT;
+			this.currentChatTick = (currentChatTick + 1) % TICKS_UNTIL_LOGOUT;
 			
 			// if we've cycled around back to the beginning, we've timed out
 			if (currentChatTick == lastReceivedChatTick)
