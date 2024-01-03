@@ -315,7 +315,7 @@ public class JebScapeConnection
 	
 	public void logout()
 	{
-		accountHash = 0;
+		// NOTE: don't reset accountHash as this can cause problems later on with received packets
 		accountKey = 0;
 		isUsingKey = false;
 		logoutGame();
