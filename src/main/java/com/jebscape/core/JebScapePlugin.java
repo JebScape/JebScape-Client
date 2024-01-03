@@ -246,12 +246,26 @@ public class JebScapePlugin extends Plugin
 			// TODO: Consider processing received data from the JebScape server at a faster pace using onClientTick()
 			server.onGameTick();
 			
-			if (!server.isGameLoggedIn())
+			boolean isGameLoggedIn = server.isGameLoggedIn();
+			boolean isChatLoggedIn = server.isChatLoggedIn();
+			
+			// we want to clean up if no longer logged in
+			if (!isGameLoggedIn && megaserverMod.isActive())
 			{
-				// we want to clean up if no longer logged in
-				if (megaserverMod.isActive())
-					megaserverMod.stop();
+				megaserverMod.stop();
+			}
+			
+			if (!isChatLoggedIn)
+			{
+				// since chat server isn't yet connected, we shouldn't be receiving any data
+				liveHiscoresOverlay.setContainsData(false);
 				
+				// whether we disconnected or just haven't started yet, this should be reset
+				megaserverMod.resetPost200mXpAccumulators();
+			}
+			
+			if (!isGameLoggedIn || !isChatLoggedIn)
+			{
 				if (loginTimeout <= 0)
 				{
 					// log in as a guest
@@ -264,29 +278,12 @@ public class JebScapePlugin extends Plugin
 					--loginTimeout;
 				}
 			}
-			else if (client.getAccountHash() == server.getAccountHash())
+			
+			if (isGameLoggedIn && client.getAccountHash() == server.getAccountHash())
 			{
-				loginTimeout = 0;
+				if (isChatLoggedIn)
+					loginTimeout = 0;
 				
-				// since we have a game and chat server, one may still be not logged in, so let's try again
-				if (!server.isChatLoggedIn())
-				{
-					if (loginTimeout <= 0)
-					{
-						server.login(client.getAccountHash(), accountKey, Text.sanitize(client.getLocalPlayer().getName()), useAccountKey);
-					}
-					else
-					{
-						// if we just attempted to log in recently, let's wait a bit
-						--loginTimeout;
-					}
-					// since chat server isn't yet connected, we shouldn't be receiving any data
-					liveHiscoresOverlay.setContainsData(false);
-					
-					// whether we disconnected or just haven't started yet, this should be reset
-					megaserverMod.resetPost200mXpAccumulators();
-				}
-					
 				int gameDataBytesSent = 0;
 				
 				// we're logged in, let's play!
