@@ -46,8 +46,10 @@ public class JebScapeConnection
 	public static final int GAME_SERVER_PACKETS_PER_TICK = 16;
 	public static final int CHAT_SERVER_PACKETS_PER_TICK = 4;
 	private long accountHash;
-	private long accountKey;
-	private boolean isUsingKey;
+	private long gameAccountKey;
+	private long chatAccountKey;
+	private boolean isGameUsingKey;
+	private boolean isChatUsingKey;
 	private static final byte[] EMPTY_BYTES = new byte[96];
 	private int gameSessionID = -1;
 	private int chatSessionID = -1;
@@ -179,7 +181,7 @@ public class JebScapeConnection
 		return isConnected() && isChatLoggedIn;
 	}
 	
-	public boolean login(long accountHash, long accountKey, String accountName, boolean useKey)
+	public boolean login(long accountHash, long gameAccountKey, long chatAccountKey, boolean useKey, String accountName)
 	{
 		if (!gameChannel.isConnected() || !chatChannel.isConnected())
 			connect();
@@ -188,13 +190,13 @@ public class JebScapeConnection
 			return false;
 		
 		this.accountHash = accountHash; // 8 bytes
-		this.accountKey = accountKey; // 8 bytes
-		this.isUsingKey = useKey;
 		
 		boolean success = true;
 		
 		if (!isGameLoggedIn)
 		{
+			this.gameAccountKey = gameAccountKey; // 8 bytes
+			this.isGameUsingKey = useKey;
 			gameServerPacketsReceived = 0xFFFF;
 			
 			// set the header
@@ -205,7 +207,7 @@ public class JebScapeConnection
 			// 4 bits reserved
 			int loginPacketHeader = LOGIN_PACKET & 0x3;					// 2/32 bits
 			loginPacketHeader |= (gameSessionID & 0x1FFFF) << 2;		// 19/32 bits
-			loginPacketHeader |= (isUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
+			loginPacketHeader |= (isGameUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
 			loginPacketHeader |= (PROTOCOL_VERSION & 0xFF) << 20;		// 28/32 bits
 			loginPacketHeader |= 0xF << 28;								// 32/32 bits
 			
@@ -218,7 +220,7 @@ public class JebScapeConnection
 				gameClientPacket.buffer.clear();
 				gameClientPacket.buffer.putInt(loginPacketHeader);								// 4/64 bytes
 				gameClientPacket.buffer.putLong(accountHash);									// 12/64 bytes
-				gameClientPacket.buffer.putLong(accountKey);									// 20/64 bytes
+				gameClientPacket.buffer.putLong(gameAccountKey);								// 20/64 bytes
 				gameClientPacket.buffer.put(nameBytes, 0, strLen);						// up to 32/64 bytes
 				if (strLen < 12)
 					gameClientPacket.buffer.put(EMPTY_BYTES, 0, 12 - strLen);		// 32/64 bytes
@@ -250,6 +252,8 @@ public class JebScapeConnection
 		
 		if (!isChatLoggedIn)
 		{
+			this.chatAccountKey = chatAccountKey; // 8 bytes
+			this.isChatUsingKey = useKey;
 			chatServerPacketsReceived = 0xFFFF;
 			
 			// set the header
@@ -260,7 +264,7 @@ public class JebScapeConnection
 			// 4 bits reserved
 			int loginPacketHeader = LOGIN_PACKET & 0x3;					// 2/32 bits
 			loginPacketHeader |= (chatSessionID & 0x1FFFF) << 2;		// 19/32 bits
-			loginPacketHeader |= (isUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
+			loginPacketHeader |= (isChatUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
 			loginPacketHeader |= (PROTOCOL_VERSION & 0xFF) << 20;		// 28/32 bits
 			loginPacketHeader |= 0xF << 28;								// 32/32 bits
 			
@@ -273,7 +277,7 @@ public class JebScapeConnection
 				chatClientPacket.buffer.clear();
 				chatClientPacket.buffer.putInt(loginPacketHeader);								// 4/128 bytes
 				chatClientPacket.buffer.putLong(accountHash);									// 12/128 bytes
-				chatClientPacket.buffer.putLong(accountKey);									// 20/128 bytes
+				chatClientPacket.buffer.putLong(chatAccountKey);								// 20/128 bytes
 				chatClientPacket.buffer.put(nameBytes, 0, strLen);						// up to 32/128 bytes
 				if (strLen < 12)
 					chatClientPacket.buffer.put(EMPTY_BYTES, 0, 12 - strLen);		// 32/128 bytes
@@ -315,9 +319,6 @@ public class JebScapeConnection
 	
 	public void logout()
 	{
-		// NOTE: don't reset accountHash as this can cause problems later on with received packets
-		accountKey = 0;
-		isUsingKey = false;
 		logoutGame();
 		logoutChat();
 	}
@@ -345,11 +346,18 @@ public class JebScapeConnection
 		return accountHash;
 	}
 	
-	public long getAccountKey() { return accountKey; }
+	public long getGameAccountKey() { return gameAccountKey; }
 	
-	public boolean isGuest()
+	public long getChatAccountKey() { return chatAccountKey; }
+	
+	public boolean isGameGuest()
 	{
-		return isGameLoggedIn && !isUsingKey;
+		return isGameLoggedIn && !isGameUsingKey;
+	}
+	
+	public boolean isChatGuest()
+	{
+		return isChatLoggedIn && !isChatUsingKey;
 	}
 	
 	// returns data on all packets received in this tick, but may include late packets from previous ticks
@@ -423,7 +431,7 @@ public class JebScapeConnection
 			// 8 bits reserved
 			int packetHeader = GAME_PACKET & 0x3;				// 2/32 bits
 			packetHeader |= (gameSessionID & 0x1FFFF) << 2;		// 19/32 bits
-			packetHeader |= (isUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
+			packetHeader |= (isGameUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
 			packetHeader |= (currentGameTick & 0xF) << 20;		// 24/32 bits
 			packetHeader |= 0xFF << 24;							// 32/32 bits
 			
@@ -432,7 +440,7 @@ public class JebScapeConnection
 				gameClientPacket.buffer.clear();
 				gameClientPacket.buffer.putInt(packetHeader);	// 4/32 bytes
 				gameClientPacket.buffer.putLong(accountHash);	// 12/64 bytes
-				gameClientPacket.buffer.putLong(accountKey);	// 20/64 bytes
+				gameClientPacket.buffer.putLong(gameAccountKey);// 20/64 bytes
 				gameClientPacket.buffer.putInt(dataA);			// 24/64 bytes
 				gameClientPacket.buffer.putInt(dataB);			// 28/64 bytes
 				gameClientPacket.buffer.putInt(dataC);			// 32/64 bytes
@@ -472,7 +480,7 @@ public class JebScapeConnection
 			// 8 bits reserved
 			int packetHeader = CHAT_PACKET & 0x3;				// 2/32 bits
 			packetHeader |= (chatSessionID & 0x1FFFF) << 2;		// 19/32 bits
-			packetHeader |= (isUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
+			packetHeader |= (isChatUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
 			packetHeader |= (currentChatTick & 0xF) << 20;		// 24/32 bits
 			packetHeader |= 0xFF << 24;							// 32/32 bits
 			
@@ -486,7 +494,7 @@ public class JebScapeConnection
 				chatClientPacket.buffer.clear();
 				chatClientPacket.buffer.putInt(packetHeader);									// 4/128 bytes
 				chatClientPacket.buffer.putLong(accountHash);									// 12/128 bytes
-				chatClientPacket.buffer.putLong(accountKey);									// 20/128 bytes
+				chatClientPacket.buffer.putLong(chatAccountKey);								// 20/128 bytes
 				chatClientPacket.buffer.putInt(dataA);											// 24/128 bytes
 				chatClientPacket.buffer.putInt(dataB);											// 28/128 bytes
 				chatClientPacket.buffer.putInt(dataC);											// 32/128 bytes
@@ -564,32 +572,28 @@ public class JebScapeConnection
 					int newNumPacketsSent = (packetHeader >>> 24) & 0xF;			// 28/32 bits
 					int newPacketID = (packetHeader >>> 28) & 0xF;					// 32/32 bits
 					
-					if (!isGameLoggedIn && newPacketType == LOGIN_PACKET)
+					if (newPacketType == LOGIN_PACKET)
 					{
-						// we've received an ACK from the server for our login request
-						this.isGameLoggedIn = true;
-						this.isUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
-						this.gameSessionID = newSessionID;
-						
-						if (newIsUsingKey)
+						if (!isGameLoggedIn)
 						{
-							this.accountKey = gameServerPacket.buffer.getLong();
-							gameServerPacket.buffer.rewind();
-							gameServerPacket.buffer.getInt(); // bring us back to where we started
+							// place the initial tick timing info here to serve as a baseline
+							this.currentGameTick = newTick;
+							this.lastReceivedGameTick = newTick;
 						}
 						
-						// place the initial tick timing info here to serve as a baseline
-						this.currentGameTick = newTick;
-						this.lastReceivedGameTick = newTick;
+						// we've received an ACK from the server for our login request
+						this.isGameLoggedIn = true;
+						this.isGameUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
+						this.gameAccountKey = newIsUsingKey ? gameServerPacket.buffer.getLong() : 0;
+						this.gameSessionID = newSessionID;
+						this.gameNumOnlinePlayers = gameServerPacket.buffer.getInt(GAME_SERVER_PACKET_SIZE - 4); // read the last 4 bytes
 					}
 					
-					if (isGameLoggedIn && (newPacketType == LOGIN_PACKET || newPacketType == GAME_PACKET) && gameSessionID == newSessionID)
+					if (isGameLoggedIn && newPacketType == GAME_PACKET && gameSessionID == newSessionID)
 					{
 						// place the latest tick info here
 						gameServerData[newTick][newPacketID].setData(gameServerPacket);
 						numGameServerPacketsSent[newTick] = newNumPacketsSent + 1; // we store in the range of 0-15 to represent 1-16
-						
-						this.gameNumOnlinePlayers = gameServerData[newTick][newPacketID].subDataBlocks[6][3];
 					}
 				}
 			} while (bytesReceived > 0);
@@ -628,24 +632,28 @@ public class JebScapeConnection
 					int newNumPacketsSent = (packetHeader >>> 24) & 0xF;			// 28/32 bits
 					int newPacketID = (packetHeader >>> 28) & 0xF;					// 32/32 bits
 					
-					if (!isChatLoggedIn && newPacketType == LOGIN_PACKET)
+					if (newPacketType == LOGIN_PACKET)
 					{
 						// we've received an ACK from the server for our login request
-						this.isChatLoggedIn = true;
-						this.chatSessionID = newSessionID;
+						if (!isChatLoggedIn)
+						{
+							// place the initial tick timing info here to serve as a baseline
+							this.currentChatTick = newTick;
+							this.lastReceivedChatTick = newTick;
+						}
 						
-						// place the initial tick timing info here to serve as a baseline
-						this.currentChatTick = newTick;
-						this.lastReceivedChatTick = newTick;
+						this.isChatLoggedIn = true;
+						this.isChatUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
+						this.chatAccountKey = newIsUsingKey ? chatServerPacket.buffer.getLong() : 0;
+						this.chatSessionID = newSessionID;
+						this.chatNumOnlinePlayers = chatServerPacket.buffer.getInt(CHAT_SERVER_PACKET_SIZE - 4); // read the last 4 bytes
 					}
 					
-					if (isChatLoggedIn && (newPacketType == LOGIN_PACKET || newPacketType == CHAT_PACKET) && chatSessionID == newSessionID)
+					if (isChatLoggedIn && newPacketType == CHAT_PACKET && chatSessionID == newSessionID)
 					{
 						// place the latest tick info here
 						chatServerData[newTick][newPacketID].setData(chatServerPacket);
 						numChatServerPacketsSent[newTick] = newNumPacketsSent + 1; // we store in the range of 0-15 to represent 1-16
-						
-						this.chatNumOnlinePlayers = chatServerData[newTick][newPacketID].subDataBlocks[6][3];
 					}
 				}
 			} while (bytesReceived > 0);

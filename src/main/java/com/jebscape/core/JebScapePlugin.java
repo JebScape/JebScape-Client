@@ -70,7 +70,8 @@ public class JebScapePlugin extends Plugin
 	private MegaserverMod megaserverMod = new MegaserverMod();
 	private boolean useMegaserverMod = true;
 	private boolean useAccountKey = false;
-	private long accountKey = 0;
+	private long gameAccountKey = 0;
+	private long chatAccountKey = 0;
 	private int loginTimeout = 0;
 	
 	@Override
@@ -216,27 +217,48 @@ public class JebScapePlugin extends Plugin
 		// don't tick anything if not logged into OSRS
 		if (useMegaserverMod && (client.getGameState() == GameState.LOGGED_IN || client.getGameState() == GameState.LOADING))
 		{
-			boolean prevGameLoginStatus = server.isGameLoggedIn();
+			boolean prevChatLoginStatus = server.isChatLoggedIn();
 			RuneScapeProfileType rsProfileType = RuneScapeProfileType.getCurrent(client);
 			
-			if (!server.isGameLoggedIn() || !server.isChatLoggedIn())
+			if (!server.isGameLoggedIn())
 			{
-				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "JebScapeAccountKey");
+				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "AccountKeyGame");
 				if (keyConfig != null)
 				{
 					Long key = Long.parseLong(keyConfig);
 					if (key != null)
 					{
-						this.accountKey = key ^ client.getAccountHash();
+						this.gameAccountKey = key ^ client.getAccountHash();
 					}
 					else
 					{
-						this.accountKey = 0;
+						this.gameAccountKey = 0;
 					}
 				}
 				else
 				{
-					this.accountKey = 0;
+					this.gameAccountKey = 0;
+				}
+			}
+			
+			if (!server.isChatLoggedIn())
+			{
+				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "AccountKey");
+				if (keyConfig != null)
+				{
+					Long key = Long.parseLong(keyConfig);
+					if (key != null)
+					{
+						this.chatAccountKey = key ^ client.getAccountHash();
+					}
+					else
+					{
+						this.chatAccountKey = 0;
+					}
+				}
+				else
+				{
+					this.chatAccountKey = 0;
 				}
 			}
 			
@@ -269,7 +291,7 @@ public class JebScapePlugin extends Plugin
 				if (loginTimeout <= 0)
 				{
 					// log in as a guest
-					server.login(client.getAccountHash(), accountKey, Text.sanitize(client.getLocalPlayer().getName()), useAccountKey);
+					server.login(client.getAccountHash(), gameAccountKey, chatAccountKey, useAccountKey, Text.sanitize(client.getLocalPlayer().getName()));
 					loginTimeout = 4; // wait 4 ticks before attempting to log in again
 				}
 				else
@@ -279,9 +301,9 @@ public class JebScapePlugin extends Plugin
 				}
 			}
 			
-			if (isGameLoggedIn && client.getAccountHash() == server.getAccountHash())
+			if (isChatLoggedIn && client.getAccountHash() == server.getAccountHash())
 			{
-				if (isChatLoggedIn)
+				if (isGameLoggedIn)
 					loginTimeout = 0;
 				
 				int gameDataBytesSent = 0;
@@ -293,24 +315,33 @@ public class JebScapePlugin extends Plugin
 				gameDataBytesSent += megaserverMod.onGameTick();
 				
 				// send a chat message if we've just logged in
-				if (prevGameLoginStatus == false)
+				if (prevChatLoginStatus == false)
 				{
 					ChatMessageBuilder message = new ChatMessageBuilder();
-					message.append(ChatColorType.NORMAL).append("Welcome to JebScape! There are currently " + server.getGameNumOnlinePlayers() + " players online.");
+					message.append(ChatColorType.NORMAL).append("Welcome to JebScape! There are currently " + server.getChatNumOnlinePlayers() + " players online.");
 					chatMessageManager.queue(QueuedMessage.builder()
 							.type(ChatMessageType.WELCOME)
 							.runeLiteFormattedMessage(message.build())
 							.build());
 					
-					boolean loggedInAsGuest = server.isGuest();
 					
-					// if we attempted to log in without an account key, let's save the key the server provided back
-					if (!loggedInAsGuest && accountKey == 0)
+					// if we attempted to log in with a key, let's save the key the server provided back
+					if (!server.isGameGuest() && useAccountKey && this.gameAccountKey != server.getGameAccountKey())
 					{
-						this.accountKey = server.getAccountKey();
-						if (accountKey != 0)
+						this.gameAccountKey = server.getGameAccountKey();
+						if (gameAccountKey != 0)
 						{
-							configManager.setRSProfileConfiguration("JebScape", "JebScapeAccountKey", accountKey ^ client.getAccountHash());
+							configManager.setRSProfileConfiguration("JebScape", "AccountKeyGame", gameAccountKey ^ client.getAccountHash());
+						}
+					}
+					
+					// the chat key is what matters the most right now, so let's prioritize it
+					boolean chatLoggedInAsGuest = server.isChatGuest();
+					if (!chatLoggedInAsGuest && useAccountKey && chatAccountKey != server.getChatAccountKey())
+					{
+						if (chatAccountKey == 0)
+						{
+							configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash());
 							
 							message = new ChatMessageBuilder();
 							message.append(ChatColorType.HIGHLIGHT).append("Your new JebScape account has been automatically created and linked to your OSRS account. Your JebScape login details have been saved to your RuneLite profile and will automatically log you in each time you log into your OSRS account.");
@@ -319,24 +350,22 @@ public class JebScapePlugin extends Plugin
 									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
 									.build());
 						}
-					}
-					else if (loggedInAsGuest)
-					{
-						if (accountKey != 0)
+						else
 						{
-							// login must've failed if we think we're using a key but the server has told us otherwise
+							configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash());
+							
 							message = new ChatMessageBuilder();
-							message.append(ChatColorType.HIGHLIGHT).append("Login attempt failed. Invalid account key. Please try again.");
+							message.append(ChatColorType.HIGHLIGHT).append("Invalid login details. A new JebScape account has been automatically created instead and replaced the previous login details stored in your RuneLite profile. Please contact Jebrim on Discord if you see this message.");
 							chatMessageManager.queue(QueuedMessage.builder()
 									.type(ChatMessageType.GAMEMESSAGE)
 									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=f50202"))
 									.build());
-							
-							// clear config
-							configManager.unsetRSProfileConfiguration("JebScape", "JebScapeAccountKey");
-							this.accountKey = 0;
 						}
 						
+						this.chatAccountKey = server.getChatAccountKey();
+					}
+					else if (chatLoggedInAsGuest)
+					{
 						if (rsProfileType != RuneScapeProfileType.STANDARD)
 						{
 							message = new ChatMessageBuilder();

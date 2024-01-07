@@ -50,6 +50,7 @@ public class MegaserverMod
 	private Client client;
 	private JebScapeConnection server;
 	private JebScapeLiveHiscoresOverlay liveHiscoresOverlay;
+	private JebScapeModelLoader modelLoader = new JebScapeModelLoader();
 	private int[] clientData = new int[3];
 	private Model ghostModel;
 	private JebScapeActor[] ghosts = new JebScapeActor[MAX_GHOSTS];
@@ -62,6 +63,8 @@ public class MegaserverMod
 	{
 		this.client = client;
 		this.server = server;
+		
+		modelLoader.init(client);
 		
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
@@ -92,6 +95,7 @@ public class MegaserverMod
 		this.isActive = true;
 		
 		loadGhostRenderables();
+		//modelLoader.loadPlayerCloneRenderable();
 	}
 	
 	public void stop()
@@ -290,7 +294,7 @@ public class MegaserverMod
 									boolean isPoseAnimation = ((ghostData >>> 31) & 0x1) == 0x1;	// 32/32 bits
 									
 									WorldPoint ghostPosition = new WorldPoint(playerWorldLocationX + dx, playerWorldLocationY + dy, playerWorldLocationPlane);
-									ghosts[ghostID].moveTo(ghostPosition, packedOrientation * JAU_PACKING_RATIO, animationID, isInteracting, isPoseAnimation, isInstanced);
+									ghosts[ghostID].moveTo(ghostPosition, packedOrientation * JAU_PACKING_RATIO, animationID, isInteracting, isPoseAnimation, isInstanced, gameTick);
 									
 									// extract ghost world and name
 									int ghostWorld = data.subDataBlocks[j + 1][0];
@@ -511,7 +515,17 @@ public class MegaserverMod
 		Player player = client.getLocalPlayer();
 		WorldPoint position = player.getWorldLocation();
 		boolean isPoseAnimation = player.getAnimation() == -1;
-		int animationID = isPoseAnimation ? player.getPoseAnimation() : player.getAnimation();
+		int animationID = player.getAnimation();
+		if (isPoseAnimation)
+		{
+			int currentGameTick = server.getCurrentGameTick();
+			if (currentGameTick == 0 || currentGameTick == 8)
+				animationID = player.getIdlePoseAnimation();
+			else if ((currentGameTick & 0x1) == 0x1)
+				animationID = player.getWalkAnimation();
+			else
+				animationID = player.getRunAnimation();
+		}
 		boolean isInteracting = player.getInteracting() != null;
 		int packedOrientation = player.getOrientation() / JAU_PACKING_RATIO;
 		boolean isPVP = WorldType.isPvpWorld(client.getWorldType());
@@ -574,7 +588,7 @@ public class MegaserverMod
 			int userInputDataC = startRankToTrack & 0x1FFFF;	// 17/24 bits
 			userInputDataC |= (skillType & 0x7F) << 17;			// 24/24 bits
 			
-			if (!server.isGuest()) // authenticated; TODO: do we want to split this check between game and chat servers?
+			if (!server.isChatGuest()) // authenticated
 			{
 				// if we're not sending a chat message this tick, then let's send a stat update for the hiscores
 				Skill skills[] = Skill.values();
@@ -632,6 +646,7 @@ public class MegaserverMod
 	
 	private void loadGhostRenderables()
 	{
+		///*
 		// load ghost model
 		int[] ids = client.getNpcDefinition(GHOST_3516).getModels();
 		ModelData[] modelData = new ModelData[ids.length];
@@ -641,6 +656,9 @@ public class MegaserverMod
 		
 		// use the same lighting parameters used for NPCs by Jagex
 		this.ghostModel = combinedModelData.light(64, 850, -30, -50, -30);
+		//*/
+		
+		//this.ghostModel = modelLoader.loadPlayerGhostRenderable();
 		
 		Player player = client.getLocalPlayer();
 		for (int i = 0; i < MAX_GHOSTS; i++)

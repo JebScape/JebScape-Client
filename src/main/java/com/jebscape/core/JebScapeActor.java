@@ -50,6 +50,7 @@ public class JebScapeActor
 		public boolean isInteracting;
 		public boolean isMidPoint;
 		public boolean isInstanced;
+		public int gameTick;
 	}
 	
 	private static final int MAX_TARGET_QUEUE_SIZE = 10;
@@ -89,6 +90,7 @@ public class JebScapeActor
 		IDLE_ROTATE_RIGHT
 	}
 	Animation[] animationPoses = new Animation[8];
+	int[] animationPoseIDs = new int[8];
 	
 	
 	public void init(Client client)
@@ -112,7 +114,8 @@ public class JebScapeActor
 		else
 			return;
 		rlObject.setOrientation(jauOrientation);
-		rlObject.setAnimation(null);
+		setPoseAnimations(client.getLocalPlayer());
+		rlObject.setAnimation(animationPoses[POSE_ANIM.IDLE.ordinal()]);
 		rlObject.setShouldLoop(true);
 		rlObject.setActive(true);
 		this.plane = position.getPlane();
@@ -140,14 +143,17 @@ public class JebScapeActor
 	
 	public void setPoseAnimations(Actor actor)
 	{
-		this.animationPoses[POSE_ANIM.IDLE.ordinal()] = client.loadAnimation(actor.getIdlePoseAnimation());
-		this.animationPoses[POSE_ANIM.WALK.ordinal()] = client.loadAnimation(actor.getWalkAnimation());
-		this.animationPoses[POSE_ANIM.RUN.ordinal()] = client.loadAnimation(actor.getRunAnimation());
-		this.animationPoses[POSE_ANIM.WALK_ROTATE_180.ordinal()] = client.loadAnimation(actor.getWalkRotate180());
-		this.animationPoses[POSE_ANIM.WALK_STRAFE_LEFT.ordinal()] = client.loadAnimation(actor.getWalkRotateLeft()); // rotate is a misnomer here
-		this.animationPoses[POSE_ANIM.WALK_STRAFE_RIGHT.ordinal()] = client.loadAnimation(actor.getWalkRotateRight()); // rotate is a misnomer here
-		this.animationPoses[POSE_ANIM.IDLE_ROTATE_LEFT.ordinal()] = client.loadAnimation(actor.getIdleRotateLeft());
-		this.animationPoses[POSE_ANIM.IDLE_ROTATE_RIGHT.ordinal()] = client.loadAnimation(actor.getIdleRotateRight());
+		this.animationPoseIDs[POSE_ANIM.IDLE.ordinal()] = actor.getIdlePoseAnimation();
+		this.animationPoseIDs[POSE_ANIM.WALK.ordinal()] = actor.getWalkAnimation();
+		this.animationPoseIDs[POSE_ANIM.RUN.ordinal()] = actor.getRunAnimation();
+		this.animationPoseIDs[POSE_ANIM.WALK_ROTATE_180.ordinal()] = actor.getWalkRotate180();
+		this.animationPoseIDs[POSE_ANIM.WALK_STRAFE_LEFT.ordinal()] = actor.getWalkRotateLeft(); // rotate is a misnomer here
+		this.animationPoseIDs[POSE_ANIM.WALK_STRAFE_RIGHT.ordinal()] = actor.getWalkRotateRight(); // rotate is a misnomer here
+		this.animationPoseIDs[POSE_ANIM.IDLE_ROTATE_LEFT.ordinal()] = actor.getIdleRotateLeft();
+		this.animationPoseIDs[POSE_ANIM.IDLE_ROTATE_RIGHT.ordinal()] = actor.getIdleRotateRight();
+		
+		for (int i = 0; i < 8; i++)
+			this.animationPoses[i] = client.loadAnimation(animationPoseIDs[i]);
 	}
 	
 	public WorldPoint getWorldLocation()
@@ -215,7 +221,7 @@ public class JebScapeActor
 	// This is not set up for pathfinding to the final destination of distant targets (you will just move there directly)
 	// It will, however, handle nearby collision detection (1-2 tiles away from you) under certain scenarios
 	// jauOrientation is not used if isInteracting is false; it will instead default to the angle being moved towards
-	public void moveTo(WorldPoint worldPosition, int jauOrientation, int primaryAnimationID, boolean isInteracting, boolean isPoseAnimation, boolean isInstanced)
+	public void moveTo(WorldPoint worldPosition, int jauOrientation, int primaryAnimationID, boolean isInteracting, boolean isPoseAnimation, boolean isInstanced, int gameTick)
 	{
 		// respawn this actor if it was previously despawned
 		if (!rlObject.isActive())
@@ -346,6 +352,7 @@ public class JebScapeActor
 				this.targetQueue[newTargetIndex].isInteracting = isInteracting;
 				this.targetQueue[newTargetIndex].isMidPoint = true;
 				this.targetQueue[newTargetIndex].isInstanced = isInstanced;
+				this.targetQueue[newTargetIndex].gameTick = gameTick;
 				
 				newTargetIndex = (currentTargetIndex + targetQueueSize++) % MAX_TARGET_QUEUE_SIZE;
 				prevWorldPosition = midPoint;
@@ -371,6 +378,7 @@ public class JebScapeActor
 		this.targetQueue[newTargetIndex].isPoseAnimation = isPoseAnimation;
 		this.targetQueue[newTargetIndex].isMidPoint = false;
 		this.targetQueue[newTargetIndex].isInstanced = isInstanced;
+		this.targetQueue[newTargetIndex].gameTick = gameTick;
 		
 		// handle chat message
 		if (remainingOverheadChatMessageTime > 0)
@@ -402,22 +410,45 @@ public class JebScapeActor
 				}
 				
 				// handle animations - there's still some jankiness, but let's return to the basics for now...
-				// TODO: handle animation stalling, remove extra tick of animation that's playing, strafing when interacting, and swapping out pose animations with new ones as needed...
+				// TODO: handle animation stalling, remove extra tick of animation that's playing, and strafing when interacting
 				int animationID = targetQueue[currentTargetIndex].primaryAnimationID;
+				int speed = targetQueue[currentTargetIndex].tileMovementSpeed;
+				int poseIndexToUpdate = -1;
+				boolean poseChanged = false;
+				
+				// update stored pose animation
+				if (targetQueue[currentTargetIndex].isPoseAnimation && animationID >= 0)
+				{
+					int currentGameTick = targetQueue[currentTargetIndex].gameTick;
+					
+					if (currentGameTick == 0 || currentGameTick == 8)
+						poseIndexToUpdate = 0;
+					else if ((currentGameTick & 0x1) == 0x1)
+						poseIndexToUpdate = 1;
+					else
+						poseIndexToUpdate = 2;
+					
+					if (animationPoseIDs[poseIndexToUpdate] != animationID)
+					{
+						this.animationPoseIDs[poseIndexToUpdate] = animationID;
+						this.animationPoses[poseIndexToUpdate] = client.loadAnimation(animationID);
+						poseChanged = true;
+					}
+				}
+				
 				if (!targetQueue[currentTargetIndex].isPoseAnimation && currentAnimationID != animationID)
 				{
 					rlObject.setAnimation(client.loadAnimation(animationID));
 					this.currentAnimationID = animationID;
 				}
-				else if (targetQueue[currentTargetIndex].isPoseAnimation && (currentAnimationID != -1 || currentMovementSpeed != targetQueue[currentTargetIndex].tileMovementSpeed))
+				else if (targetQueue[currentTargetIndex].isPoseAnimation && (currentAnimationID >= 0 || currentMovementSpeed != speed || (poseChanged && poseIndexToUpdate == speed)))
 				{
-					int speed = targetQueue[currentTargetIndex].tileMovementSpeed;
 					// we don't want to go beyond run (speed of 2)
 					rlObject.setAnimation(speed > 2 ? null : animationPoses[speed]);
 					this.currentAnimationID = -1;
 				}
 				
-				this.currentMovementSpeed = targetQueue[currentTargetIndex].tileMovementSpeed;
+				this.currentMovementSpeed = speed;
 				
 				LocalPoint currentPosition = rlObject.getLocation();
 				int currentOrientation = rlObject.getOrientation();
@@ -444,15 +475,15 @@ public class JebScapeActor
 					if (animationStall == 0)
 					{
 						// compute the number of local points to move this tick
-						int speed = currentMovementSpeed * movementPerClientTick;
+						int lpSpeed = currentMovementSpeed * movementPerClientTick;
 						
-						if (speed > 0)
+						if (lpSpeed > 0)
 						{
 							// only use the delta if it won't send up past the target
-							if (Math.abs(dx) > speed)
-								dx = Integer.signum(dx) * speed;
-							if (Math.abs(dy) > speed)
-								dy = Integer.signum(dy) * speed;
+							if (Math.abs(dx) > lpSpeed)
+								dx = Integer.signum(dx) * lpSpeed;
+							if (Math.abs(dy) > lpSpeed)
+								dy = Integer.signum(dy) * lpSpeed;
 						}
 						
 						LocalPoint newLocation = new LocalPoint(currentPosition.getX() + dx, currentPosition.getY() + dy);
