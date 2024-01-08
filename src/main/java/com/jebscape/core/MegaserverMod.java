@@ -839,7 +839,7 @@ public class MegaserverMod
 			return;
 		
 		// never unset dirty here
-		boolean result = selfGhost.onClientTick();
+		boolean result = !selfGhost.onClientTick();
 		this.selfGhostDirty = selfGhostDirty ? true : result;
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
