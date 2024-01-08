@@ -390,6 +390,7 @@ public class MegaserverMod
 										this.prevGhostModelData[ghostID][2] = data.subDataBlocks[j + 1][2];
 										this.prevGhostModelData[ghostID][3] = data.subDataBlocks[j + 1][3];
 										this.prevGhostCapeID[ghostID] = ghostCapeID[ghostID];
+										ghostsDirty[ghostID] = false;
 										
 										if (modelDataChanged)
 										{
@@ -730,6 +731,7 @@ public class MegaserverMod
 				modelHasChanged = modelHasChanged || (playerCapeID != prevPlayerCapeID);
 				modelHasChanged = modelHasChanged || selfGhostDirty;
 				this.prevPlayerCapeID = playerCapeID;
+				this.selfGhostDirty = false;
 				
 				if (modelHasChanged)
 				{
@@ -836,11 +838,14 @@ public class MegaserverMod
 		if (!isActive)
 			return;
 		
-		this.selfGhostDirty = !selfGhost.onClientTick();
+		// never unset dirty here
+		boolean result = selfGhost.onClientTick();
+		this.selfGhostDirty = selfGhostDirty ? true : result;
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
 			// update local position and orientation
-			this.ghostsDirty[i] = !ghosts[i].onClientTick();
+			result = !ghosts[i].onClientTick();
+			this.ghostsDirty[i] = ghostsDirty[i] ? true : result;
 		}
 	}
 	
