@@ -56,6 +56,9 @@ public class MegaserverMod
 	private int[] gameSubData = new int[4];
 	private int playerCapeID = 31;
 	private int prevPlayerCapeID = 31;
+	private int prevGameTick = -1;
+	private boolean selfGhostDirty = true;
+	private boolean[] ghostsDirty = new boolean[MAX_GHOSTS];
 	private boolean showSelfGhost = false;
 	private Model defaultGhostModel;
 	private JebScapeActor selfGhost = new JebScapeActor();
@@ -86,6 +89,7 @@ public class MegaserverMod
 			ghosts[i].init(client);
 			this.prevGhostCapeID[i] = 31;
 			this.ghostCapeID[i] = 31;
+			this.ghostsDirty[i] = true;
 		}
 		
 		indicatorOverlay.setJebScapeActors(ghosts);
@@ -121,6 +125,8 @@ public class MegaserverMod
 		this.isActive = false;
 		this.playerCapeID = 31;
 		this.prevPlayerCapeID = 31;
+		this.prevGameTick = -1;
+		this.selfGhostDirty = true;
 		this.chatMessageToSend = "";
 		
 		if (!server.isChatLoggedIn())
@@ -129,6 +135,7 @@ public class MegaserverMod
 			resetPost200mXpAccumulators();
 		}
 		
+		selfGhost.despawn();
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
 			ghosts[i].despawn();
@@ -138,8 +145,8 @@ public class MegaserverMod
 			this.prevGhostModelData[i][3] = 0;
 			this.prevGhostCapeID[i] = 31;
 			this.ghostCapeID[i] = 31;
+			this.ghostsDirty[i] = true;
 		}
-		selfGhost.despawn();
 	}
 	
 	public boolean isActive()
@@ -302,11 +309,13 @@ public class MegaserverMod
 					
 					if (containsMegaserverCmd && playerWorld == client.getWorld())
 					{
-						if (isFirstPacket && showSelfGhost)
+						if (isFirstPacket && showSelfGhost && prevGameTick != gameTick)
 						{
 							// handle updating self ghost here
 							WorldPoint ghostPosition = new WorldPoint(playerWorldLocationX, playerWorldLocationY, playerWorldLocationPlane);
 							selfGhost.moveTo(ghostPosition, playerPackedOrientation * JAU_PACKING_RATIO, playerAnimationID, playerIsInteracting, playerIsPoseAnimation, isInstanced, gameTick);
+							this.prevGameTick = gameTick; // this prevents packets with the same server gameTick across two different client gameTicks from repeating the same moveTo destination
+							isFirstPacket = false;
 						}
 						
 						// all ghost positional data within a packet is relative to 15 tiles SW of where the server believes the player to be
@@ -374,6 +383,7 @@ public class MegaserverMod
 										modelDataChanged = modelDataChanged || (data.subDataBlocks[j + 1][2] != prevGhostModelData[ghostID][2]);
 										modelDataChanged = modelDataChanged || (data.subDataBlocks[j + 1][3] != prevGhostModelData[ghostID][3]);
 										modelDataChanged = modelDataChanged || ghostCapeID[ghostID] != prevGhostCapeID[ghostID];
+										modelDataChanged = modelDataChanged || ghostsDirty[ghostID];
 										
 										this.prevGhostModelData[ghostID][0] = data.subDataBlocks[j + 1][0];
 										this.prevGhostModelData[ghostID][1] = data.subDataBlocks[j + 1][1];
@@ -430,8 +440,6 @@ public class MegaserverMod
 							}
 						}
 					}
-					
-					isFirstPacket = false;
 				}
 			}
 			
@@ -692,18 +700,18 @@ public class MegaserverMod
 		equipmentIDs[4] = allEquipmentIDs[KitType.LEGS.ordinal()];
 		equipmentIDs[5] = allEquipmentIDs[KitType.HANDS.ordinal()];
 		equipmentIDs[6] = allEquipmentIDs[KitType.BOOTS.ordinal()];
-		bodyPartIDs[0] = playerComposition.getKitId(KitType.HAIR) > 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.HAIR)] : 31;
-		bodyPartIDs[1] = playerComposition.getKitId(KitType.JAW) > 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.JAW)] : 31;
-		bodyPartIDs[2] = playerComposition.getKitId(KitType.ARMS) > 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.ARMS)] : 31;
+		bodyPartIDs[0] = playerComposition.getKitId(KitType.HAIR) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.HAIR)] : 31;
+		bodyPartIDs[1] = playerComposition.getKitId(KitType.JAW) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.JAW)] : 31;
+		bodyPartIDs[2] = playerComposition.getKitId(KitType.ARMS) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.ARMS)] : 31;
 		int isFemale = playerComposition.getGender();
 		
 		if (showSelfGhost)
 		{
 			// debug
 			//selfGhost.setName(player.getName());
-			//selfGhost.setChatMessage("Game Tick: " + server.getCurrentGameTick());
+			//selfGhost.setChatMessage("Plane: " + client.getPlane());
 			
-			if ((server.getCurrentGameTick() & 0x1) == 0x1)
+			if ((prevGameTick & 0x1) == 0x1)
 			{
 				boolean modelHasChanged = false;
 				
@@ -720,6 +728,7 @@ public class MegaserverMod
 				}
 				
 				modelHasChanged = modelHasChanged || (playerCapeID != prevPlayerCapeID);
+				modelHasChanged = modelHasChanged || selfGhostDirty;
 				this.prevPlayerCapeID = playerCapeID;
 				
 				if (modelHasChanged)
@@ -827,11 +836,11 @@ public class MegaserverMod
 		if (!isActive)
 			return;
 		
-		selfGhost.onClientTick();
+		this.selfGhostDirty = !selfGhost.onClientTick();
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
 			// update local position and orientation
-			ghosts[i].onClientTick();
+			this.ghostsDirty[i] = !ghosts[i].onClientTick();
 		}
 	}
 	

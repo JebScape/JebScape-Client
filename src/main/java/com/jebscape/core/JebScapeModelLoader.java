@@ -95,11 +95,11 @@ public class JebScapeModelLoader
 		
 		for (int i = 0; i < 32; i++)
 		{
-			if (hairKitMap[i] > 0)
+			if (hairKitMap[i] >= 0)
 				kitIDtoBodyPartMap[hairKitMap[i]] = i;
-			if (jawKitMap[i] > 0)
+			if (jawKitMap[i] >= 0)
 				kitIDtoBodyPartMap[jawKitMap[i]] = i;
-			if (armsKitMap[i] > 0)
+			if (armsKitMap[i] >= 0)
 				kitIDtoBodyPartMap[armsKitMap[i]] = i;
 		}
 	}
@@ -284,7 +284,15 @@ public class JebScapeModelLoader
 			if (equipmentIDs[i] > 512)
 			{
 				int itemID = equipmentIDs[i] - 512;
-				byte[] itemData = gameDB.loadData(ITEM_CONFIG_TYPE, itemID);
+				byte[] itemData;
+				try
+				{
+					itemData = gameDB.loadData(ITEM_CONFIG_TYPE, itemID);
+				}
+				catch (Exception e)
+				{
+					continue;
+				}
 				RuneLiteItemDefinition itemDefinition = itemLoader.load(itemID, itemData);
 				if (gender == 0)
 				{
@@ -308,7 +316,15 @@ public class JebScapeModelLoader
 			else if (equipmentIDs[i] >= 256)
 			{
 				int kitID = equipmentIDs[i] - 256;
-				byte[] kitData = gameDB.loadData(KIT_CONFIG_TYPE, kitID);
+				byte[] kitData;
+				try
+				{
+					kitData = gameDB.loadData(KIT_CONFIG_TYPE, kitID);
+				}
+				catch (Exception e)
+				{
+					continue;
+				}
 				RuneLiteKitDefinition kitDefinition = kitLoader.load(kitID, kitData);
 				for (int j = 0; j < kitDefinition.models.length; j++)
 				{
@@ -325,7 +341,15 @@ public class JebScapeModelLoader
 			int kitID = kitIDs[i];
 			if (kitID >= 0)
 			{
-				byte[] kitData = gameDB.loadData(KIT_CONFIG_TYPE, kitID);
+				byte[] kitData;
+				try
+				{
+					kitData = gameDB.loadData(KIT_CONFIG_TYPE, kitID);
+				}
+				catch (Exception e)
+				{
+					continue;
+				}
 				RuneLiteKitDefinition kitDefinition = kitLoader.load(kitID, kitData);
 				for (int j = 0; j < kitDefinition.models.length; j++)
 				{
