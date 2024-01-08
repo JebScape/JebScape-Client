@@ -37,13 +37,32 @@ public interface JebScapeConfig extends Config
 {
 	@ConfigSection(
 			position = 0,
+			name = "Megaserver",
+			description = "Enables seeing and chatting with players on other worlds."
+	)
+	String megaserverSection = "megaserverSection";
+	
+	@ConfigItem(
+			position = 1,
+			keyName = "showSelfGhost",
+			name = "Show Self Ghost",
+			description = "Check this to see your own ghost as others on JebScape would see it.",
+			section = megaserverSection
+	)
+	default boolean showSelfGhost()
+	{
+		return false;
+	}
+	
+	@ConfigSection(
+			position = 2,
 			name = "Live Hiscores",
 			description = "Tracks post-200m XP gains and rank changes every tick. Requires JebScape account to participate."
 	)
 	String liveHiscoresSection = "liveHiscoresSection";
 	
 	@ConfigItem(
-			position = 1,
+			position = 3,
 			keyName = "hideLiveHiscores",
 			name = "Hide Live Hiscores",
 			description = "Uncheck this to make live hiscores visible again.",
@@ -55,9 +74,9 @@ public interface JebScapeConfig extends Config
 	}
 	
 	@ConfigItem(
-			position = 2,
+			position = 4,
 			keyName = "selectSkillLiveHiscores",
-			name = "Select Skill",
+			name = "Skill",
 			description = "Select the skill to watch.",
 			section = liveHiscoresSection
 	)
@@ -71,10 +90,10 @@ public interface JebScapeConfig extends Config
 			max = 99996
 	)
 	@ConfigItem(
-			position = 3,
+			position = 5,
 			keyName = "startRankLiveHiscores",
-			name = "Starting Rank",
-			description = "Enter the top rank being watched.",
+			name = "Rank",
+			description = "Enter the starting rank being watched.",
 			section = liveHiscoresSection
 	)
 	default int startRankLiveHiscores()

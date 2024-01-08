@@ -58,7 +58,7 @@ public class JebScapeConnection
 	private int gameNumOnlinePlayers = 0;
 	private int chatNumOnlinePlayers = 0;
 	
-	private static final int PROTOCOL_VERSION = 1;
+	private static final int PROTOCOL_VERSION = 2;
 	private static final int EMPTY_PACKET = 0x0;
 	private static final int LOGIN_PACKET = 0x1;
 	private static final int GAME_PACKET = 0x2;
@@ -69,8 +69,7 @@ public class JebScapeConnection
 	private static final int GAME_SERVER_PACKET_SIZE = 128;
 	private static final int CHAT_SERVER_PACKET_SIZE = 128;
 	
-	// TODO: Refactor this. This class really ought to be split into something more generic and then two instances made,
-	//  one for the the game connection and one for the chat connection.
+	// TODO: Merge the two servers into one with 240 byte packet paylods.
 	private JebScapePacket gameClientPacket = new JebScapePacket();
 	private JebScapePacket chatClientPacket = new JebScapePacket();
 	private JebScapePacket gameServerPacket = new JebScapePacket();
@@ -207,7 +206,7 @@ public class JebScapeConnection
 			// 4 bits reserved
 			int loginPacketHeader = LOGIN_PACKET & 0x3;					// 2/32 bits
 			loginPacketHeader |= (gameSessionID & 0x1FFFF) << 2;		// 19/32 bits
-			loginPacketHeader |= (isGameUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
+			loginPacketHeader |= (isGameUsingKey ? 0x1 : 0x0) << 19;	// 20/32 bits
 			loginPacketHeader |= (PROTOCOL_VERSION & 0xFF) << 20;		// 28/32 bits
 			loginPacketHeader |= 0xF << 28;								// 32/32 bits
 			
@@ -264,7 +263,7 @@ public class JebScapeConnection
 			// 4 bits reserved
 			int loginPacketHeader = LOGIN_PACKET & 0x3;					// 2/32 bits
 			loginPacketHeader |= (chatSessionID & 0x1FFFF) << 2;		// 19/32 bits
-			loginPacketHeader |= (isChatUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
+			loginPacketHeader |= (isChatUsingKey ? 0x1 : 0x0) << 19;	// 20/32 bits
 			loginPacketHeader |= (PROTOCOL_VERSION & 0xFF) << 20;		// 28/32 bits
 			loginPacketHeader |= 0xF << 28;								// 32/32 bits
 			
@@ -413,7 +412,7 @@ public class JebScapeConnection
 	}
 	
 	// must be 3 ints (12 bytes); extraChatData is limited to size of 96 bytes (24 ints)
-	public boolean sendGameData(int dataA, int dataB, int dataC, byte[] extraChatData)
+	public boolean sendGameData(int[] coreData, int[] gameSubData, byte[] extraChatData)
 	{
 		if (!gameChannel.isConnected() || !chatChannel.isConnected())
 			return false;
@@ -431,7 +430,7 @@ public class JebScapeConnection
 			// 8 bits reserved
 			int packetHeader = GAME_PACKET & 0x3;				// 2/32 bits
 			packetHeader |= (gameSessionID & 0x1FFFF) << 2;		// 19/32 bits
-			packetHeader |= (isGameUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
+			packetHeader |= (isGameUsingKey ? 0x1 : 0x0) << 19;	// 20/32 bits
 			packetHeader |= (currentGameTick & 0xF) << 20;		// 24/32 bits
 			packetHeader |= 0xFF << 24;							// 32/32 bits
 			
@@ -441,11 +440,13 @@ public class JebScapeConnection
 				gameClientPacket.buffer.putInt(packetHeader);	// 4/32 bytes
 				gameClientPacket.buffer.putLong(accountHash);	// 12/64 bytes
 				gameClientPacket.buffer.putLong(gameAccountKey);// 20/64 bytes
-				gameClientPacket.buffer.putInt(dataA);			// 24/64 bytes
-				gameClientPacket.buffer.putInt(dataB);			// 28/64 bytes
-				gameClientPacket.buffer.putInt(dataC);			// 32/64 bytes
-				gameClientPacket.buffer.putLong(reserved);		// 40/64 bytes
-				gameClientPacket.buffer.putLong(reserved);		// 48/64 bytes
+				gameClientPacket.buffer.putInt(coreData[0]);	// 24/64 bytes
+				gameClientPacket.buffer.putInt(coreData[1]);	// 28/64 bytes
+				gameClientPacket.buffer.putInt(coreData[2]);	// 32/64 bytes
+				gameClientPacket.buffer.putInt(gameSubData[0]);	// 36/64 bytes
+				gameClientPacket.buffer.putInt(gameSubData[1]);	// 40/64 bytes
+				gameClientPacket.buffer.putInt(gameSubData[2]);	// 44/64 bytes
+				gameClientPacket.buffer.putInt(gameSubData[3]);	// 48/64 bytes
 				gameClientPacket.buffer.putLong(reserved);		// 56/64 bytes
 				gameClientPacket.buffer.putLong(reserved);		// 64/64 bytes
 				gameClientPacket.buffer.rewind();
@@ -480,7 +481,7 @@ public class JebScapeConnection
 			// 8 bits reserved
 			int packetHeader = CHAT_PACKET & 0x3;				// 2/32 bits
 			packetHeader |= (chatSessionID & 0x1FFFF) << 2;		// 19/32 bits
-			packetHeader |= (isChatUsingKey ? 0x1 : 0x0) << 19;		// 20/32 bits
+			packetHeader |= (isChatUsingKey ? 0x1 : 0x0) << 19;	// 20/32 bits
 			packetHeader |= (currentChatTick & 0xF) << 20;		// 24/32 bits
 			packetHeader |= 0xFF << 24;							// 32/32 bits
 			
@@ -495,9 +496,9 @@ public class JebScapeConnection
 				chatClientPacket.buffer.putInt(packetHeader);									// 4/128 bytes
 				chatClientPacket.buffer.putLong(accountHash);									// 12/128 bytes
 				chatClientPacket.buffer.putLong(chatAccountKey);								// 20/128 bytes
-				chatClientPacket.buffer.putInt(dataA);											// 24/128 bytes
-				chatClientPacket.buffer.putInt(dataB);											// 28/128 bytes
-				chatClientPacket.buffer.putInt(dataC);											// 32/128 bytes
+				chatClientPacket.buffer.putInt(coreData[0]);										// 24/128 bytes
+				chatClientPacket.buffer.putInt(coreData[1]);										// 28/128 bytes
+				chatClientPacket.buffer.putInt(coreData[2]);										// 32/128 bytes
 				if (bytesLength > 0)
 					chatClientPacket.buffer.put(extraChatData, 0, bytesLength);			// up to 128/128 bytes
 				if (bytesLength < 96)

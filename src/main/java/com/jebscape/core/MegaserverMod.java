@@ -27,6 +27,7 @@ package com.jebscape.core;
 import net.runelite.api.*;
 import net.runelite.api.coords.*;
 import net.runelite.api.events.*;
+import net.runelite.api.kit.*;
 import net.runelite.client.util.Text;
 import static net.runelite.api.NpcID.*;
 import java.nio.charset.*;
@@ -51,11 +52,23 @@ public class MegaserverMod
 	private JebScapeConnection server;
 	private JebScapeLiveHiscoresOverlay liveHiscoresOverlay;
 	private JebScapeModelLoader modelLoader = new JebScapeModelLoader();
-	private int[] clientData = new int[3];
-	private Model ghostModel;
+	private int[] coreData = new int[3];
+	private int[] gameSubData = new int[4];
+	private int playerCapeID = 31;
+	private int prevPlayerCapeID = 31;
+	private boolean showSelfGhost = false;
+	private Model defaultGhostModel;
+	private JebScapeActor selfGhost = new JebScapeActor();
 	private JebScapeActor[] ghosts = new JebScapeActor[MAX_GHOSTS];
+	private int[] prevSelfGhostEquipmentIDs = new int[7];
+	private int[] prevSelfGhostBodyPartIDs = new int[3];
+	private int[][] prevGhostModelData = new int[MAX_GHOSTS][4];
+	private int[] prevGhostCapeID = new int[MAX_GHOSTS];
+	private int[] ghostCapeID = new int[MAX_GHOSTS];
 	private byte[] nameBytes = new byte[12];
 	private byte[] chatBytes = new byte[80];
+	private int[] equipmentIDs = new int[7];
+	private int[] bodyPartIDs = new int[3];
 	private String chatMessageToSend = "";
 	
 	
@@ -66,10 +79,13 @@ public class MegaserverMod
 		
 		modelLoader.init(client);
 		
+		selfGhost.init(client);
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
 			ghosts[i] = new JebScapeActor();
 			ghosts[i].init(client);
+			this.prevGhostCapeID[i] = 31;
+			this.ghostCapeID[i] = 31;
 		}
 		
 		indicatorOverlay.setJebScapeActors(ghosts);
@@ -95,7 +111,6 @@ public class MegaserverMod
 		this.isActive = true;
 		
 		loadGhostRenderables();
-		//modelLoader.loadPlayerCloneRenderable();
 	}
 	
 	public void stop()
@@ -104,6 +119,8 @@ public class MegaserverMod
 			return;
 		
 		this.isActive = false;
+		this.playerCapeID = 31;
+		this.prevPlayerCapeID = 31;
 		this.chatMessageToSend = "";
 		
 		if (!server.isChatLoggedIn())
@@ -113,12 +130,31 @@ public class MegaserverMod
 		}
 		
 		for (int i = 0; i < MAX_GHOSTS; i++)
+		{
 			ghosts[i].despawn();
+			this.prevGhostModelData[i][0] = 0;
+			this.prevGhostModelData[i][1] = 0;
+			this.prevGhostModelData[i][2] = 0;
+			this.prevGhostModelData[i][3] = 0;
+			this.prevGhostCapeID[i] = 31;
+			this.ghostCapeID[i] = 31;
+		}
+		selfGhost.despawn();
 	}
 	
 	public boolean isActive()
 	{
 		return isActive;
+	}
+	
+	public void showSelfGhost()
+	{
+		this.showSelfGhost = true;
+	}
+	
+	public void hideSelfGhost()
+	{
+		this.showSelfGhost = false;
 	}
 	
 	public void onChatMessage(ChatMessage chatMessage)
@@ -172,8 +208,8 @@ public class MegaserverMod
 		JebScapeServerData[][] chatServerData = server.getRecentChatServerData();
 		int[] numGamePacketsSent = server.getNumGameServerPacketsSent();
 		int[] numChatPacketsSent = server.getNumChatServerPacketsSent();
-		int lastReceivedGameTick = server.getLastReceivedGameTick();
-		int lastReceivedChatTick = server.getLastReceivedChatTick();
+		int currentGameTick = server.getCurrentGameTick();
+		int currentChatTick = server.getCurrentChatTick();
 		final int JAU_PACKING_RATIO = 32;
 		
 		// this will update up to 64 ghosts with up to 16 past ticks' worth of data
@@ -182,11 +218,12 @@ public class MegaserverMod
 		for (int i = 0; i < server.TICKS_UNTIL_LOGOUT; i++)
 		{
 			// start the cycle from the earliest tick we might have data on
-			int gameTick = (lastReceivedGameTick + i) % server.TICKS_UNTIL_LOGOUT;
+			int gameTick = (currentGameTick + i) % server.TICKS_UNTIL_LOGOUT;
 			
 			// only bother if we've received any packets for this tick
 			if (numGamePacketsSent[gameTick] > 0)
 			{
+				boolean isFirstPacket = true;
 				for (int packetID = 0; packetID < server.GAME_SERVER_PACKETS_PER_TICK; packetID++)
 				{
 					JebScapeServerData data = gameServerData[gameTick][packetID];
@@ -197,7 +234,10 @@ public class MegaserverMod
 					int playerWorldLocationX = 0;
 					int playerWorldLocationY = 0;
 					int playerWorldLocationPlane = 0;
-					int playerAnimationState = 0;
+					int playerPackedOrientation = 0;
+					int playerAnimationID = 0;
+					boolean playerIsInteracting = false;
+					boolean playerIsPoseAnimation = false;
 					boolean isInstanced = false;
 					
 					// let's initialize our player position data
@@ -211,17 +251,25 @@ public class MegaserverMod
 						// 14 bits world
 						// 2 bits plane
 						containsMegaserverCmd = ((data.coreData[0] & 0xFF) & // bitflag, so let's just test the one bit
-												MEGASERVER_MOVEMENT_UPDATE_CMD) != 0;	// 8/32 bits
-						playerWorldFlags = (data.coreData[0] >>> 8) & 0xFF;				// 16/32 bits
-						playerWorld = (data.coreData[0] >>> 16) & 0x3FFF;				// 30/32 bits
-						playerWorldLocationPlane = (data.coreData[0] >>> 30) & 0x3; 	// 32/32 bits
+												MEGASERVER_MOVEMENT_UPDATE_CMD) != 0;		// 8/32 bits
+						playerWorldFlags = (data.coreData[0] >>> 8) & 0xFF;					// 16/32 bits
+						playerWorld = (data.coreData[0] >>> 16) & 0x3FFF;					// 30/32 bits
+						playerWorldLocationPlane = (data.coreData[0] >>> 30) & 0x3; 		// 32/32 bits
 						
 						// 16 bits world X position
 						// 16 bits world Y position
-						playerWorldLocationX = (data.coreData[1] & 0xFFFF);				// 16/32 bits
-						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);	// 32/32 bits
+						playerWorldLocationX = (data.coreData[1] & 0xFFFF);					// 16/32 bits
+						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);		// 32/32 bits
 						
-						playerAnimationState = data.coreData[2];
+						// 10 bits reserved
+						// 6 bits packedOrientation
+						// 14 bits animationID
+						// 1 bit isInteracting
+						// 1 bit isPoseAnimation
+						playerPackedOrientation = (data.coreData[2] >>> 10) & 0x3F;			// 16/32 bits
+						playerAnimationID = (data.coreData[2] >>> 16) & 0x3FFF;				// 30/32 bits
+						playerIsInteracting = ((data.coreData[2] >>> 30) & 0x1) == 0x1;		// 31/32 bits
+						playerIsPoseAnimation = ((data.coreData[2] >>> 31) & 0x1) == 0x1;	// 32/32 bits
 						
 						// experimental implementation for instances
 						isInstanced = ((playerWorldFlags >>> 0x1) & 0x1) == 0x1;
@@ -254,6 +302,13 @@ public class MegaserverMod
 					
 					if (containsMegaserverCmd && playerWorld == client.getWorld())
 					{
+						if (isFirstPacket && showSelfGhost)
+						{
+							// handle updating self ghost here
+							WorldPoint ghostPosition = new WorldPoint(playerWorldLocationX, playerWorldLocationY, playerWorldLocationPlane);
+							selfGhost.moveTo(ghostPosition, playerPackedOrientation * JAU_PACKING_RATIO, playerAnimationID, playerIsInteracting, playerIsPoseAnimation, isInstanced, gameTick);
+						}
+						
 						// all ghost positional data within a packet is relative to 15 tiles SW of where the server believes the player to be
 						playerWorldLocationX -= 15;
 						playerWorldLocationY -= 15;
@@ -265,7 +320,15 @@ public class MegaserverMod
 							
 							// all data outside the total range must necessarily have despawned ghosts
 							if (packetID >= numGamePacketsSent[gameTick])
+							{
 								ghosts[ghostID].despawn();
+								this.prevGhostModelData[ghostID][0] = 0;
+								this.prevGhostModelData[ghostID][1] = 0;
+								this.prevGhostModelData[ghostID][2] = 0;
+								this.prevGhostModelData[ghostID][3] = 0;
+								this.prevGhostCapeID[ghostID] = 31;
+								this.ghostCapeID[ghostID] = 31;
+							}
 							else if (!emptyPacket) // within range and not empty, so let's process
 							{
 								// each piece of ghost data is 4 bytes
@@ -276,7 +339,15 @@ public class MegaserverMod
 								boolean despawned = (ghostData & 0x3FF) == 0x3FF; // 10 bits (if dx and dy are both all 1s)
 								
 								if (despawned)
+								{
 									ghosts[ghostID].despawn();
+									this.prevGhostModelData[ghostID][0] = 0;
+									this.prevGhostModelData[ghostID][1] = 0;
+									this.prevGhostModelData[ghostID][2] = 0;
+									this.prevGhostModelData[ghostID][3] = 0;
+									this.prevGhostCapeID[ghostID] = 31;
+									this.ghostCapeID[ghostID] = 31;
+								}
 								else
 								{
 									// not despawned, so let's extract the full data
@@ -296,35 +367,76 @@ public class MegaserverMod
 									WorldPoint ghostPosition = new WorldPoint(playerWorldLocationX + dx, playerWorldLocationY + dy, playerWorldLocationPlane);
 									ghosts[ghostID].moveTo(ghostPosition, packedOrientation * JAU_PACKING_RATIO, animationID, isInteracting, isPoseAnimation, isInstanced, gameTick);
 									
-									// extract ghost world and name
-									int ghostWorld = data.subDataBlocks[j + 1][0];
-									ghosts[ghostID].setWorld(ghostWorld);
-									
-									nameBytes[0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
-									nameBytes[1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
-									nameBytes[2] = (byte)((data.subDataBlocks[j + 1][1] >>> 16) & 0xFF);
-									nameBytes[3] = (byte)((data.subDataBlocks[j + 1][1] >>> 24) & 0xFF);
-									
-									nameBytes[4] = (byte)(data.subDataBlocks[j + 1][2] & 0xFF);
-									nameBytes[5] = (byte)((data.subDataBlocks[j + 1][2] >>> 8) & 0xFF);
-									nameBytes[6] = (byte)((data.subDataBlocks[j + 1][2] >>> 16) & 0xFF);
-									nameBytes[7] = (byte)((data.subDataBlocks[j + 1][2] >>> 24) & 0xFF);
-									
-									nameBytes[8] = (byte)(data.subDataBlocks[j + 1][3] & 0xFF);
-									nameBytes[9] = (byte)((data.subDataBlocks[j + 1][3] >>> 8) & 0xFF);
-									nameBytes[10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
-									nameBytes[11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
-									
-									ghosts[ghostID].setName(new String(nameBytes, StandardCharsets.UTF_8).trim());
+									if ((gameTick & 0x1) == 0x1)
+									{
+										boolean modelDataChanged = data.subDataBlocks[j + 1][0] != prevGhostModelData[ghostID][0];
+										modelDataChanged = modelDataChanged || (data.subDataBlocks[j + 1][1] != prevGhostModelData[ghostID][1]);
+										modelDataChanged = modelDataChanged || (data.subDataBlocks[j + 1][2] != prevGhostModelData[ghostID][2]);
+										modelDataChanged = modelDataChanged || (data.subDataBlocks[j + 1][3] != prevGhostModelData[ghostID][3]);
+										modelDataChanged = modelDataChanged || ghostCapeID[ghostID] != prevGhostCapeID[ghostID];
+										
+										this.prevGhostModelData[ghostID][0] = data.subDataBlocks[j + 1][0];
+										this.prevGhostModelData[ghostID][1] = data.subDataBlocks[j + 1][1];
+										this.prevGhostModelData[ghostID][2] = data.subDataBlocks[j + 1][2];
+										this.prevGhostModelData[ghostID][3] = data.subDataBlocks[j + 1][3];
+										this.prevGhostCapeID[ghostID] = ghostCapeID[ghostID];
+										
+										if (modelDataChanged)
+										{
+											// extract ghost model data
+											equipmentIDs[0] = data.subDataBlocks[j + 1][0] & 0xFFFF;
+											equipmentIDs[1] = (data.subDataBlocks[j + 1][0] >>> 16) & 0xFFFF;
+											
+											equipmentIDs[2] = data.subDataBlocks[j + 1][1] & 0xFFFF;
+											equipmentIDs[3] = (data.subDataBlocks[j + 1][1] >>> 16) & 0xFFFF;
+											
+											equipmentIDs[4] = data.subDataBlocks[j + 1][2] & 0xFFFF;
+											equipmentIDs[5] = (data.subDataBlocks[j + 1][2] >>> 16) & 0xFFFF;
+											
+											equipmentIDs[6] = data.subDataBlocks[j + 1][3] & 0xFFFF;
+											bodyPartIDs[0] = (data.subDataBlocks[j + 1][3] >>> 16) & 0x1F;
+											bodyPartIDs[1] = (data.subDataBlocks[j + 1][3] >>> 21) & 0x1F;
+											bodyPartIDs[2] = (data.subDataBlocks[j + 1][3] >>> 26) & 0x1F;
+											int isFemale = (data.subDataBlocks[j + 1][3] >>> 31) & 0x1;
+											
+											ghosts[ghostID].setModel(modelLoader.loadPlayerGhostRenderable(equipmentIDs, bodyPartIDs, isFemale, ghostCapeID[ghostID]));
+										}
+									}
+									else
+									{
+										// extract ghost world and name
+										int ghostWorld = data.subDataBlocks[j + 1][0] & 0x3FFF;
+										ghosts[ghostID].setWorld(ghostWorld);
+										this.ghostCapeID[ghostID] = (data.subDataBlocks[j + 1][0] >>> 14) & 0x1F;
+										
+										nameBytes[0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
+										nameBytes[1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
+										nameBytes[2] = (byte)((data.subDataBlocks[j + 1][1] >>> 16) & 0xFF);
+										nameBytes[3] = (byte)((data.subDataBlocks[j + 1][1] >>> 24) & 0xFF);
+										
+										nameBytes[4] = (byte)(data.subDataBlocks[j + 1][2] & 0xFF);
+										nameBytes[5] = (byte)((data.subDataBlocks[j + 1][2] >>> 8) & 0xFF);
+										nameBytes[6] = (byte)((data.subDataBlocks[j + 1][2] >>> 16) & 0xFF);
+										nameBytes[7] = (byte)((data.subDataBlocks[j + 1][2] >>> 24) & 0xFF);
+										
+										nameBytes[8] = (byte)(data.subDataBlocks[j + 1][3] & 0xFF);
+										nameBytes[9] = (byte)((data.subDataBlocks[j + 1][3] >>> 8) & 0xFF);
+										nameBytes[10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
+										nameBytes[11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
+										
+										ghosts[ghostID].setName(new String(nameBytes, StandardCharsets.UTF_8).trim());
+									}
 								}
 							}
 						}
 					}
+					
+					isFirstPacket = false;
 				}
 			}
 			
 			// now let's do all this again for chat messages
-			int chatTick = (lastReceivedChatTick + i) % server.TICKS_UNTIL_LOGOUT;
+			int chatTick = (currentChatTick + i) % server.TICKS_UNTIL_LOGOUT;
 			
 			// only bother if we've received any packets for this tick
 			if (numChatPacketsSent[chatTick] > 0)
@@ -503,9 +615,14 @@ public class MegaserverMod
 							}
 							
 							liveHiscoresOverlay.updateSkillHiscoresData(trackedSkill, startRank, liveHiscoresPlayerNames, liveHiscoresLevels, liveHiscoresXPs, liveHiscoresOnlineStatuses);
+							
+							if (startRank == 1 && liveHiscoresPlayerNames[0].contentEquals(client.getLocalPlayer().getName()))
+							{
+								// if our player is rank 1 in a skill, let's update their capeID accordingly
+								// set to female max cape if rank 1 Overall is female
+								this.playerCapeID = (skillType == 0 && client.getLocalPlayer().getPlayerComposition().getGender() == 1) ? modelLoader.femaleMaxCapeID : skillType;
+							}
 						}
-						
-						// TODO: replace profile data in subDataBlocks[6] with the skill type and name of the nearby rank 1 player, cycling through over multiple packets any others that might also be in the area
 					}
 				}
 			}
@@ -518,7 +635,6 @@ public class MegaserverMod
 		int animationID = player.getAnimation();
 		if (isPoseAnimation)
 		{
-			int currentGameTick = server.getCurrentGameTick();
 			if (currentGameTick == 0 || currentGameTick == 8)
 				animationID = player.getIdlePoseAnimation();
 			else if ((currentGameTick & 0x1) == 0x1)
@@ -541,28 +657,102 @@ public class MegaserverMod
 		// 6 bits reserved
 		// 14 bits world
 		// 2 bits plane
-		clientData[0] = MEGASERVER_MOVEMENT_UPDATE_CMD & 0xFF;	// 8/32 bits
-		clientData[0] |= (isPVP ? 0x1 : 0x0) << 8;				// 9/32 bits
-		clientData[0] |= (isInstanced ? 0x1 : 0x0) << 9;		// 10/32 bits
-		clientData[0] |= (0x0 & 0x3F) << 10;					// 16/32 bits
-		clientData[0] |= (client.getWorld() & 0x3FFF) << 16;	// 30/32 bits
-		clientData[0] |= (client.getPlane() & 0x3) << 30;		// 32/32 bits
+		coreData[0] = MEGASERVER_MOVEMENT_UPDATE_CMD & 0xFF;// 8/32 bits
+		coreData[0] |= (isPVP ? 0x1 : 0x0) << 8;			// 9/32 bits
+		coreData[0] |= (isInstanced ? 0x1 : 0x0) << 9;		// 10/32 bits
+		coreData[0] |= (0x0 & 0x3F) << 10;					// 16/32 bits
+		coreData[0] |= (client.getWorld() & 0x3FFF) << 16;	// 30/32 bits
+		coreData[0] |= (client.getPlane() & 0x3) << 30;		// 32/32 bits
 		
 		// 16 bits world X position
 		// 16 bits world Y position
-		clientData[1] = position.getX() & 0xFFFF;				// 16/32 bits
-		clientData[1] |= (position.getY() & 0xFFFF) << 16;		// 32/32 bits
+		coreData[1] = position.getX() & 0xFFFF;				// 16/32 bits
+		coreData[1] |= (position.getY() & 0xFFFF) << 16;	// 32/32 bits
 		
-		// 10 bits reserved
+		// 5 bits reserved
+		// 5 bits playerCapeID
 		// 6 bits packedOrientation
 		// 14 bits animationID
 		// 1 bit isInteracting
 		// 1 bit isPoseAnimation
-		clientData[2] = 0x0 & 0x3FF;							// 10/32 bits
-		clientData[2] |= (packedOrientation & 0x3F) << 10;		// 16/32 bits
-		clientData[2] |= (animationID & 0x3FFF) << 16;			// 30/32 bits
-		clientData[2] |= (isInteracting ? 0x1 : 0x0) << 30;		// 31/32 bits
-		clientData[2] |= (isPoseAnimation ? 0x1 : 0x0) << 31;	// 32/32 bits
+		coreData[2] = (0x0 & 0x3FF) << 5;					// 5/32 bits
+		coreData[2] |= (playerCapeID & 0x1F) << 5;			// 10/32 bits
+		coreData[2] |= (packedOrientation & 0x3F) << 10;	// 16/32 bits
+		coreData[2] |= (animationID & 0x3FFF) << 16;		// 30/32 bits
+		coreData[2] |= (isInteracting ? 0x1 : 0x0) << 30;	// 31/32 bits
+		coreData[2] |= (isPoseAnimation ? 0x1 : 0x0) << 31;	// 32/32 bits
+		
+		// get player models and send them across as well
+		PlayerComposition playerComposition = player.getPlayerComposition();
+		int[] allEquipmentIDs = playerComposition.getEquipmentIds();
+		equipmentIDs[0] = allEquipmentIDs[KitType.AMULET.ordinal()];
+		equipmentIDs[1] = allEquipmentIDs[KitType.WEAPON.ordinal()];
+		equipmentIDs[2] = allEquipmentIDs[KitType.TORSO.ordinal()];
+		equipmentIDs[3] = allEquipmentIDs[KitType.SHIELD.ordinal()];
+		equipmentIDs[4] = allEquipmentIDs[KitType.LEGS.ordinal()];
+		equipmentIDs[5] = allEquipmentIDs[KitType.HANDS.ordinal()];
+		equipmentIDs[6] = allEquipmentIDs[KitType.BOOTS.ordinal()];
+		bodyPartIDs[0] = playerComposition.getKitId(KitType.HAIR) > 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.HAIR)] : 31;
+		bodyPartIDs[1] = playerComposition.getKitId(KitType.JAW) > 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.JAW)] : 31;
+		bodyPartIDs[2] = playerComposition.getKitId(KitType.ARMS) > 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.ARMS)] : 31;
+		int isFemale = playerComposition.getGender();
+		
+		if (showSelfGhost)
+		{
+			// debug
+			//selfGhost.setName(player.getName());
+			//selfGhost.setChatMessage("Game Tick: " + server.getCurrentGameTick());
+			
+			if ((server.getCurrentGameTick() & 0x1) == 0x1)
+			{
+				boolean modelHasChanged = false;
+				
+				for (int i = 0; i < equipmentIDs.length; i++)
+				{
+					modelHasChanged = modelHasChanged || (equipmentIDs[i] != prevSelfGhostEquipmentIDs[i]);
+					this.prevSelfGhostEquipmentIDs[i] = equipmentIDs[i];
+				}
+				
+				for (int i = 0; i < bodyPartIDs.length; i++)
+				{
+					modelHasChanged = modelHasChanged || (bodyPartIDs[i] != prevSelfGhostBodyPartIDs[i]);
+					this.prevSelfGhostBodyPartIDs[i] = bodyPartIDs[i];
+				}
+				
+				modelHasChanged = modelHasChanged || (playerCapeID != prevPlayerCapeID);
+				this.prevPlayerCapeID = playerCapeID;
+				
+				if (modelHasChanged)
+				{
+					selfGhost.setModel(modelLoader.loadPlayerGhostRenderable(equipmentIDs, bodyPartIDs, isFemale, playerCapeID));
+				}
+			}
+		}
+		else
+		{
+			selfGhost.despawn();
+		}
+		
+		// 16 bits per equipment ID (2x)
+		gameSubData[0] = equipmentIDs[0] & 0xFFFF;			// 16/32 bits
+		gameSubData[0] |= (equipmentIDs[1] & 0xFFFF) << 16;	// 32/32 bits
+		
+		// 16 bits per equipment ID (2x)
+		gameSubData[1] = equipmentIDs[2] & 0xFFFF;			// 16/32 bits
+		gameSubData[1] |= (equipmentIDs[3] & 0xFFFF) << 16;	// 32/32 bits
+		
+		// 16 bits per equipment ID (2x)
+		gameSubData[2] = equipmentIDs[4] & 0xFFFF;			// 16/32 bits
+		gameSubData[2] |= (equipmentIDs[5] & 0xFFFF) << 16;	// 32/32 bits
+		
+		// 16 bits equipment ID
+		// 5 bits per kit ID (3x)
+		// 1 bit isFemale
+		gameSubData[3] = equipmentIDs[6] & 0xFFFF;			// 16/32 bits
+		gameSubData[3] |= (bodyPartIDs[0] & 0x1F) << 16;	// 21/32 bits
+		gameSubData[3] |= (bodyPartIDs[1] & 0x1F) << 21;	// 26/32 bits
+		gameSubData[3] |= (bodyPartIDs[2] & 0x1F) << 26;	// 31/32 bits
+		gameSubData[3] |= (isFemale & 0x1) << 31;			// 32/32 bits
 		
 		byte[] extraChatData = new byte[96];
 		
@@ -576,7 +766,7 @@ public class MegaserverMod
 		else
 		{
 			// update the command flag sent
-			clientData[0] |= LIVE_HISCORES_STATS_UPDATE_CMD;
+			coreData[0] |= LIVE_HISCORES_STATS_UPDATE_CMD;
 			
 			// TODO: account for Overall or custom skill
 			int skillType = skillTypeToTrack.ordinal() + 1; // reserve Overall for 0
@@ -629,14 +819,15 @@ public class MegaserverMod
 			}
 		}
 		
-		return server.sendGameData(clientData[0], clientData[1], clientData[2], extraChatData) ? 12 : 0; // 3 * 4-byte ints = 12 bytes
+		return server.sendGameData(coreData, gameSubData, extraChatData) ? 12 : 0;
 	}
 	
 	public void onClientTick(ClientTick clientTick)
 	{
 		if (!isActive)
 			return;
-			
+		
+		selfGhost.onClientTick();
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
 			// update local position and orientation
@@ -646,7 +837,6 @@ public class MegaserverMod
 	
 	private void loadGhostRenderables()
 	{
-		///*
 		// load ghost model
 		int[] ids = client.getNpcDefinition(GHOST_3516).getModels();
 		ModelData[] modelData = new ModelData[ids.length];
@@ -655,16 +845,14 @@ public class MegaserverMod
 		ModelData combinedModelData = client.mergeModels(modelData, ids.length);
 		
 		// use the same lighting parameters used for NPCs by Jagex
-		this.ghostModel = combinedModelData.light(64, 850, -30, -50, -30);
-		//*/
+		this.defaultGhostModel = combinedModelData.light(64, 850, -30, -50, -30);
 		
-		//this.ghostModel = modelLoader.loadPlayerGhostRenderable();
-		
-		Player player = client.getLocalPlayer();
+		selfGhost.setDefaultModel(defaultGhostModel);
+		selfGhost.setPoseAnimations(client.getLocalPlayer());
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
-			ghosts[i].setModel(ghostModel);
-			ghosts[i].setPoseAnimations(player);
+			ghosts[i].setDefaultModel(defaultGhostModel);
+			ghosts[i].setPoseAnimations(client.getLocalPlayer());
 		}
 	}
 }

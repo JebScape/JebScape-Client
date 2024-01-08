@@ -31,6 +31,7 @@ public class JebScapeActor
 {
 	private Client client;
 	private RuneLiteObject rlObject;
+	private Model defaultModel;
 	private int world;
 	private int plane;
 	private String actorName;
@@ -101,9 +102,22 @@ public class JebScapeActor
 			targetQueue[i] = new Target();
 	}
 	
+	public void setDefaultModel(Model model)
+	{
+		this.defaultModel = model;
+		rlObject.setModel(model);
+	}
+	
 	public void setModel(Model model)
 	{
+		// TODO: consider splitting weapon/shield slot separate from the rest of the model so these can be removed as needed when animating
 		rlObject.setModel(model);
+		if (rlObject.isActive())
+		{
+			// reset if model has updated
+			rlObject.setActive(false);
+			rlObject.setActive(true);
+		}
 	}
 	
 	public void spawn(WorldPoint position, int jauOrientation)
@@ -129,6 +143,7 @@ public class JebScapeActor
 	public void despawn()
 	{
 		rlObject.setActive(false);
+		rlObject.setModel(defaultModel);
 		this.overheadText = "";
 		this.actorName = "";
 		this.chatMessage = "";
@@ -436,15 +451,17 @@ public class JebScapeActor
 					}
 				}
 				
+				// we don't want to go beyond run (speed of 2)
+				int cappedSpeed = speed > 2 ? 2 : speed;
+				int cappedCurrentMovementSpeed = currentMovementSpeed > 2 ? 2 : currentMovementSpeed;
 				if (!targetQueue[currentTargetIndex].isPoseAnimation && currentAnimationID != animationID)
 				{
 					rlObject.setAnimation(client.loadAnimation(animationID));
 					this.currentAnimationID = animationID;
 				}
-				else if (targetQueue[currentTargetIndex].isPoseAnimation && (currentAnimationID >= 0 || currentMovementSpeed != speed || (poseChanged && poseIndexToUpdate == speed)))
+				else if (targetQueue[currentTargetIndex].isPoseAnimation && ((currentAnimationID >= 0) || (cappedCurrentMovementSpeed != cappedSpeed) || (poseChanged && poseIndexToUpdate == cappedSpeed)))
 				{
-					// we don't want to go beyond run (speed of 2)
-					rlObject.setAnimation(speed > 2 ? null : animationPoses[speed]);
+					rlObject.setAnimation(animationPoses[cappedSpeed]);
 					this.currentAnimationID = -1;
 				}
 				

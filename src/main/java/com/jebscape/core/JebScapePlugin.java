@@ -96,6 +96,11 @@ public class JebScapePlugin extends Plugin
 			useMegaserverMod = true;
 			megaserverMod.init(client, server, actorIndicatorOverlay, minimapOverlay, liveHiscoresOverlay);
 			
+			if (configManager.getConfiguration("jebscape", "showSelfGhost", boolean.class))
+				megaserverMod.showSelfGhost();
+			else
+				megaserverMod.hideSelfGhost();
+			
 			if (configManager.getConfiguration("jebscape", "hideLiveHiscores", boolean.class))
 				liveHiscoresOverlay.hide();
 			else
@@ -169,6 +174,18 @@ public class JebScapePlugin extends Plugin
 	{
 		if (configChanged.getGroup().contentEquals("jebscape"))
 		{
+			if (configChanged.getKey().contentEquals("showSelfGhost"))
+			{
+				if (config.showSelfGhost())
+				{
+					megaserverMod.showSelfGhost();
+				}
+				else
+				{
+					megaserverMod.hideSelfGhost();
+				}
+			}
+			
 			if (configChanged.getKey().contentEquals("hideLiveHiscores"))
 			{
 				if (config.hideLiveHiscores())
@@ -217,6 +234,7 @@ public class JebScapePlugin extends Plugin
 		// don't tick anything if not logged into OSRS
 		if (useMegaserverMod && (client.getGameState() == GameState.LOGGED_IN || client.getGameState() == GameState.LOADING))
 		{
+			boolean prevGameLoginStatus = server.isGameLoggedIn();
 			boolean prevChatLoginStatus = server.isChatLoggedIn();
 			RuneScapeProfileType rsProfileType = RuneScapeProfileType.getCurrent(client);
 			
@@ -314,17 +332,20 @@ public class JebScapePlugin extends Plugin
 				
 				gameDataBytesSent += megaserverMod.onGameTick();
 				
-				// send a chat message if we've just logged in
-				if (prevChatLoginStatus == false)
+				ChatMessageBuilder message;
+				if (prevGameLoginStatus == false)
 				{
-					ChatMessageBuilder message = new ChatMessageBuilder();
-					message.append(ChatColorType.NORMAL).append("Welcome to JebScape! There are currently " + server.getChatNumOnlinePlayers() + " players online.");
+					message = new ChatMessageBuilder();
+					message.append(ChatColorType.NORMAL).append("Welcome to JebScape! There are currently " + server.getGameNumOnlinePlayers() + " players online.");
 					chatMessageManager.queue(QueuedMessage.builder()
 							.type(ChatMessageType.WELCOME)
 							.runeLiteFormattedMessage(message.build())
 							.build());
-					
-					
+				}
+				
+				// send a chat message if we've just logged in
+				if (prevChatLoginStatus == false)
+				{
 					// if we attempted to log in with a key, let's save the key the server provided back
 					if (!server.isGameGuest() && useAccountKey && this.gameAccountKey != server.getGameAccountKey())
 					{
@@ -341,8 +362,6 @@ public class JebScapePlugin extends Plugin
 					{
 						if (chatAccountKey == 0)
 						{
-							configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash());
-							
 							message = new ChatMessageBuilder();
 							message.append(ChatColorType.HIGHLIGHT).append("Your new JebScape account has been automatically created and linked to your OSRS account. Your JebScape login details have been saved to your RuneLite profile and will automatically log you in each time you log into your OSRS account.");
 							chatMessageManager.queue(QueuedMessage.builder()
@@ -352,8 +371,6 @@ public class JebScapePlugin extends Plugin
 						}
 						else
 						{
-							configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash());
-							
 							message = new ChatMessageBuilder();
 							message.append(ChatColorType.HIGHLIGHT).append("Invalid login details. A new JebScape account has been automatically created instead and replaced the previous login details stored in your RuneLite profile. Please contact Jebrim on Discord if you see this message.");
 							chatMessageManager.queue(QueuedMessage.builder()
@@ -363,6 +380,7 @@ public class JebScapePlugin extends Plugin
 						}
 						
 						this.chatAccountKey = server.getChatAccountKey();
+						configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash());
 					}
 					else if (chatLoggedInAsGuest)
 					{
