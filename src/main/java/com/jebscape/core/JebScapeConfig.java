@@ -90,13 +90,13 @@ public interface JebScapeConfig extends Config
 	@ConfigItem(
 			position = 1,
 			keyName = "showSelfGhost",
-			name = "Show Self Ghost",
-			description = "Check this to see your own ghost as others on JebScape would see it.",
+			name = "Always Show Self Ghost",
+			description = "Check this to always see your own ghost as others on JebScape would see it.",
 			section = megaserverSection
 	)
 	default boolean showSelfGhost()
 	{
-		return false;
+		return true;
 	}
 	
 	@ConfigSection(
