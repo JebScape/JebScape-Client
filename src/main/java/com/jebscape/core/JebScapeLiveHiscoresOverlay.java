@@ -38,21 +38,21 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 	private static final String NAME_COLUMN_HEADER = "Name";
 	private static final String LEVEL_COLUMN_HEADER = "Level";
 	private static final String XP_COLUMN_HEADER = "XP";
-	private Skill currentSkill;
+	private int currentSkill;
 	private int currentStartRank;
 	private String[] currentPlayerNames;
 	private int[] currentLevels;
-	private int[] currentXPs;
+	private long[] currentXPs;
 	private boolean[] currentOnlineStatuses;
 	private boolean containsData;
 	
 	private static class SkillFrame
 	{
-		private Skill skill;
+		private int skill;
 		private int startRank;
 		private String[] playerNames;
 		private int[] levels;
-		private int[] XPs;
+		private long[] XPs;
 		private boolean[] onlineStatuses;
 	}
 	
@@ -77,7 +77,7 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 		this.client = client;
 		this.isVisible = false;
 		this.containsData = false;
-		this.currentSkill = Skill.AGILITY;
+		this.currentSkill = 0;
 		this.currentSkillFrameIndex = 0;
 		this.skillFrameQueueSize = 0;
 		
@@ -96,7 +96,7 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 		return isVisible;
 	}
 	
-	public void updateSkillHiscoresData(Skill skill, int startRank, String[] playerNames, int[] levels, int[] XPs, boolean[] onlineStatuses)
+	public void updateSkillHiscoresData(int skill, int startRank, String[] playerNames, int[] levels, long[] XPs, boolean[] onlineStatuses)
 	{
 		// just clear the queue and move immediately to the destination if many ticks behind or if skill suddenly changes
 		if (skillFrameQueueSize >= MAX_SKILL_FRAME_QUEUE_SIZE - 2 || currentSkill != skill)
@@ -165,11 +165,30 @@ public class JebScapeLiveHiscoresOverlay extends OverlayPanel
 						.color(headerColor)
 						.build());
 		
-		getPanelComponent().getChildren().add(
-				TitleComponent.builder()
-						.text(currentSkill.getName())
-						.color(headerColor)
-						.build());
+		if (currentSkill == 0)
+		{
+			getPanelComponent().getChildren().add(
+					TitleComponent.builder()
+							.text("Overall")
+							.color(headerColor)
+							.build());
+		}
+		else if (currentSkill <= Skill.values().length)
+		{
+			getPanelComponent().getChildren().add(
+					TitleComponent.builder()
+							.text(Skill.values()[currentSkill - 1].getName())
+							.color(headerColor)
+							.build());
+		}
+		else
+		{
+			getPanelComponent().getChildren().add(
+					TitleComponent.builder()
+							.text("Unknown Skill")
+							.color(headerColor)
+							.build());
+		}
 		
 		RuneLiteTableComponent liveHiscoresTable = new RuneLiteTableComponent();
 		

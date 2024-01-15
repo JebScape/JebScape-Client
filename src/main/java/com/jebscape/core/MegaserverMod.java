@@ -40,12 +40,12 @@ public class MegaserverMod
 	private final int MAX_GHOSTS = 64;
 	private static final int NUM_SKILLS = 24; // includes upcoming Sailing skill
 	private int post200mXpAccumulator[] = new int[NUM_SKILLS];
-	private Skill skillTypeToTrack = Skill.AGILITY;
+	private int skillTypeToTrack = 0;
 	private int startRankToTrack = 1;
 	private static final int NUM_RANKS = 5;
 	private String[] liveHiscoresPlayerNames = new String[NUM_RANKS];
 	private int[] liveHiscoresLevels = new int[NUM_RANKS];
-	private int[] liveHiscoresXPs = new int[NUM_RANKS];
+	private long[] liveHiscoresXPs = new long[NUM_RANKS];
 	private boolean[] liveHiscoresOnlineStatuses = new boolean[NUM_RANKS];
 	private boolean isActive = false;
 	private Client client;
@@ -73,7 +73,6 @@ public class MegaserverMod
 	private int[] equipmentIDs = new int[7];
 	private int[] bodyPartIDs = new int[3];
 	private String chatMessageToSend = "";
-	
 	
 	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay, JebScapeMinimapOverlay minimapOverlay, JebScapeLiveHiscoresOverlay liveHiscoresOverlay)
 	{
@@ -194,7 +193,7 @@ public class MegaserverMod
 		Arrays.fill(this.post200mXpAccumulator, 0);
 	}
 	
-	public void setLiveHiscoresSkillType(Skill skillType)
+	public void setLiveHiscoresSkillType(int skillType)
 	{
 		this.skillTypeToTrack = skillType;
 	}
@@ -584,53 +583,48 @@ public class MegaserverMod
 						liveHiscoresLevels[3] = data.subDataBlocks[0][2] & 0xFFF;				// 12/32 bits
 						liveHiscoresLevels[4] = (data.subDataBlocks[0][2] >>> 12) & 0xFFF;		// 24/32 bits
 						
-						// 7 bits skill type (technically only need 5; potential future support for many more skills)
-						// 25 bits for upperXPs; 5 bits each (reserved future support for Overall)
+						// 5 bits skill type
 						// 2 bits reserved
-						int skillType = data.subDataBlocks[0][3] & 0x7F;						// 7/32 bits
-						// TODO: set 5 upperXPs[]
+						// 25 bits for Overall upperXPs; 5 bits each
+						// 2 bits reserved
+						int skillType = data.subDataBlocks[0][3] & 0x5F;								// 5/32 bits
+						//int reserved = (data.subDataBlocks[0][3] >>> 5) & 0x3;						// 7/32 bits
+						liveHiscoresXPs[0] = (long)((data.subDataBlocks[0][3] >>> 7) & 0x1F) << 31;		// 12/32 bits
+						liveHiscoresXPs[1] = (long)((data.subDataBlocks[0][3] >>> 12) & 0x1F) << 31;	// 17/32 bits
+						liveHiscoresXPs[2] = (long)((data.subDataBlocks[0][3] >>> 17) & 0x1F) << 31;	// 22/32 bits
+						liveHiscoresXPs[3] = (long)((data.subDataBlocks[0][3] >>> 22) & 0x1F) << 31;	// 27/32 bits
+						liveHiscoresXPs[4] = (long)((data.subDataBlocks[0][3] >>> 27) & 0x1F) << 31;	// 32/32 bits
 						
-						boolean validSkillType = false;
-						Skill trackedSkill = Skill.AGILITY;
-						if (skillType > 0 && skillType <= Skill.values().length) // this should adapt to automatically include Sailing once it releases
+						for (int j = 0; j < NUM_RANKS; j++)
 						{
-							trackedSkill = Skill.values()[skillType - 1]; // Overall is skillType 0 and the rest are offset;
-							validSkillType = true;
+							liveHiscoresXPs[j] |= data.subDataBlocks[j + 1][0] & 0x7FFFFFFF;				// 31/32 bits
+							liveHiscoresOnlineStatuses[j] = ((data.subDataBlocks[j + 1][0] >>> 31) == 0x1);	// 32/32 bits
+							
+							nameBytes[0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
+							nameBytes[1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
+							nameBytes[2] = (byte)((data.subDataBlocks[j + 1][1] >>> 16) & 0xFF);
+							nameBytes[3] = (byte)((data.subDataBlocks[j + 1][1] >>> 24) & 0xFF);
+							
+							nameBytes[4] = (byte)(data.subDataBlocks[j + 1][2] & 0xFF);
+							nameBytes[5] = (byte)((data.subDataBlocks[j + 1][2] >>> 8) & 0xFF);
+							nameBytes[6] = (byte)((data.subDataBlocks[j + 1][2] >>> 16) & 0xFF);
+							nameBytes[7] = (byte)((data.subDataBlocks[j + 1][2] >>> 24) & 0xFF);
+							
+							nameBytes[8] = (byte)(data.subDataBlocks[j + 1][3] & 0xFF);
+							nameBytes[9] = (byte)((data.subDataBlocks[j + 1][3] >>> 8) & 0xFF);
+							nameBytes[10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
+							nameBytes[11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
+							
+							liveHiscoresPlayerNames[j] = new String(nameBytes, StandardCharsets.UTF_8).trim();
 						}
 						
-						if (validSkillType)
+						liveHiscoresOverlay.updateSkillHiscoresData(skillType, startRank, liveHiscoresPlayerNames, liveHiscoresLevels, liveHiscoresXPs, liveHiscoresOnlineStatuses);
+						
+						if (startRank == 1 && liveHiscoresPlayerNames[0].contentEquals(client.getLocalPlayer().getName()))
 						{
-							for (int j = 0; j < NUM_RANKS; j++)
-							{
-								liveHiscoresXPs[j] = data.subDataBlocks[j + 1][0] & 0x7FFFFFFF;					// 31/32 bits
-								liveHiscoresOnlineStatuses[j] = ((data.subDataBlocks[j + 1][0] >>> 31) == 0x1);	// 32/32 bits
-								
-								nameBytes[0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
-								nameBytes[1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
-								nameBytes[2] = (byte)((data.subDataBlocks[j + 1][1] >>> 16) & 0xFF);
-								nameBytes[3] = (byte)((data.subDataBlocks[j + 1][1] >>> 24) & 0xFF);
-								
-								nameBytes[4] = (byte)(data.subDataBlocks[j + 1][2] & 0xFF);
-								nameBytes[5] = (byte)((data.subDataBlocks[j + 1][2] >>> 8) & 0xFF);
-								nameBytes[6] = (byte)((data.subDataBlocks[j + 1][2] >>> 16) & 0xFF);
-								nameBytes[7] = (byte)((data.subDataBlocks[j + 1][2] >>> 24) & 0xFF);
-								
-								nameBytes[8] = (byte)(data.subDataBlocks[j + 1][3] & 0xFF);
-								nameBytes[9] = (byte)((data.subDataBlocks[j + 1][3] >>> 8) & 0xFF);
-								nameBytes[10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
-								nameBytes[11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
-								
-								liveHiscoresPlayerNames[j] = new String(nameBytes, StandardCharsets.UTF_8).trim();
-							}
-							
-							liveHiscoresOverlay.updateSkillHiscoresData(trackedSkill, startRank, liveHiscoresPlayerNames, liveHiscoresLevels, liveHiscoresXPs, liveHiscoresOnlineStatuses);
-							
-							if (startRank == 1 && liveHiscoresPlayerNames[0].contentEquals(client.getLocalPlayer().getName()))
-							{
-								// if our player is rank 1 in a skill, let's update their capeID accordingly
-								// set to female max cape if rank 1 Overall is female
-								this.playerCapeID = (skillType == 0 && client.getLocalPlayer().getPlayerComposition().getGender() == 1) ? modelLoader.femaleMaxCapeID : skillType;
-							}
+							// if our player is rank 1 in a skill, let's update their capeID accordingly
+							// set to female max cape if rank 1 Overall is female
+							this.playerCapeID = (skillType == 0 && client.getLocalPlayer().getPlayerComposition().getGender() == 1) ? modelLoader.femaleMaxCapeID : skillType;
 						}
 					}
 				}
@@ -780,7 +774,7 @@ public class MegaserverMod
 			coreData[0] |= LIVE_HISCORES_STATS_UPDATE_CMD;
 			
 			// TODO: account for Overall or custom skill
-			int skillType = skillTypeToTrack.ordinal() + 1; // reserve Overall for 0
+			int skillType = skillTypeToTrack;
 			
 			// TODO: pack monitor player type and value
 			// we are going to pack these slightly differently, with 1 bit per skill

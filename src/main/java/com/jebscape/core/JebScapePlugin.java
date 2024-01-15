@@ -106,8 +106,9 @@ public class JebScapePlugin extends Plugin
 			else
 				liveHiscoresOverlay.show();
 			
-			megaserverMod.setLiveHiscoresSkillType(configManager.getConfiguration("jebscape", "selectSkillLiveHiscores", Skill.class));//config.selectSkillLiveHiscores());
-			megaserverMod.setLiveHiscoresStartRank(configManager.getConfiguration("jebscape", "startRankLiveHiscores", int.class));//(config.startRankLiveHiscores());
+			JebScapeConfig.JebScapeSkill skill = configManager.getConfiguration("jebscape", "selectSkillLiveHiscores", JebScapeConfig.JebScapeSkill.class);
+			megaserverMod.setLiveHiscoresSkillType(skill.ordinal());
+			megaserverMod.setLiveHiscoresStartRank(configManager.getConfiguration("jebscape", "startRankLiveHiscores", int.class));
 		});
 		
 		loginTimeout = 0;
@@ -200,7 +201,7 @@ public class JebScapePlugin extends Plugin
 			
 			if (configChanged.getKey().contentEquals("selectSkillLiveHiscores"))
 			{
-				megaserverMod.setLiveHiscoresSkillType(config.selectSkillLiveHiscores());
+				megaserverMod.setLiveHiscoresSkillType(config.selectSkillLiveHiscores().ordinal());
 			}
 			
 			if (configChanged.getKey().contentEquals("startRankLiveHiscores"))
@@ -319,11 +320,8 @@ public class JebScapePlugin extends Plugin
 				}
 			}
 			
-			if (isChatLoggedIn && client.getAccountHash() == server.getAccountHash())
+			if ((isGameLoggedIn || isChatLoggedIn) && client.getAccountHash() == server.getAccountHash())
 			{
-				if (isGameLoggedIn)
-					loginTimeout = 0;
-				
 				int gameDataBytesSent = 0;
 				
 				// we're logged in, let's play!
@@ -332,20 +330,20 @@ public class JebScapePlugin extends Plugin
 				
 				gameDataBytesSent += megaserverMod.onGameTick();
 				
-				ChatMessageBuilder message;
-				if (prevGameLoginStatus == false)
-				{
-					message = new ChatMessageBuilder();
-					message.append(ChatColorType.NORMAL).append("Welcome to JebScape! There are currently " + server.getGameNumOnlinePlayers() + " players online.");
-					chatMessageManager.queue(QueuedMessage.builder()
-							.type(ChatMessageType.WELCOME)
-							.runeLiteFormattedMessage(message.build())
-							.build());
-				}
-				
 				// send a chat message if we've just logged in
-				if (prevChatLoginStatus == false)
+				ChatMessageBuilder message;
+				if (isGameLoggedIn && prevGameLoginStatus == false)
 				{
+					if (prevGameLoginStatus == false)
+					{
+						message = new ChatMessageBuilder();
+						message.append(ChatColorType.NORMAL).append("Welcome to JebScape! There are currently " + server.getGameNumOnlinePlayers() + " players online.");
+						chatMessageManager.queue(QueuedMessage.builder()
+								.type(ChatMessageType.WELCOME)
+								.runeLiteFormattedMessage(message.build())
+								.build());
+					}
+					
 					// if we attempted to log in with a key, let's save the key the server provided back
 					if (!server.isGameGuest() && useAccountKey && this.gameAccountKey != server.getGameAccountKey())
 					{
@@ -355,7 +353,10 @@ public class JebScapePlugin extends Plugin
 							configManager.setRSProfileConfiguration("JebScape", "AccountKeyGame", gameAccountKey ^ client.getAccountHash());
 						}
 					}
-					
+				}
+				
+				if (isChatLoggedIn && prevChatLoginStatus == false)
+				{
 					// the chat key is what matters the most right now, so let's prioritize it
 					boolean chatLoggedInAsGuest = server.isChatGuest();
 					if (!chatLoggedInAsGuest && useAccountKey && chatAccountKey != server.getChatAccountKey())
@@ -375,7 +376,7 @@ public class JebScapePlugin extends Plugin
 							message.append(ChatColorType.HIGHLIGHT).append("Invalid login details. A new JebScape account has been automatically created instead and replaced the previous login details stored in your RuneLite profile. Please contact Jebrim on Discord if you see this message.");
 							chatMessageManager.queue(QueuedMessage.builder()
 									.type(ChatMessageType.GAMEMESSAGE)
-									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=f50202"))
+									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=f90202"))
 									.build());
 						}
 						

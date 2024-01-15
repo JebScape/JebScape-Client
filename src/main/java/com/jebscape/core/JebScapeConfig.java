@@ -31,10 +31,55 @@ import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Range;
 import net.runelite.api.Skill;
 
-
 @ConfigGroup("jebscape")
 public interface JebScapeConfig extends Config
 {
+	enum JebScapeSkill
+	{
+		OVERALL("Overall"),
+		ATTACK("Attack"),
+		DEFENCE("Defence"),
+		STRENGTH("Strength"),
+		HITPOINTS("Hitpoints"),
+		RANGED("Ranged"),
+		PRAYER("Prayer"),
+		MAGIC("Magic"),
+		COOKING("Cooking"),
+		WOODCUTTING("Woodcutting"),
+		FLETCHING("Fletching"),
+		FISHING("Fishing"),
+		FIREMAKING("Firemaking"),
+		CRAFTING("Crafting"),
+		SMITHING("Smithing"),
+		MINING("Mining"),
+		HERBLORE("Herblore"),
+		AGILITY("Agility"),
+		THIEVING("Thieving"),
+		SLAYER("Slayer"),
+		FARMING("Farming"),
+		RUNECRAFT("Runecraft"),
+		HUNTER("Hunter"),
+		CONSTRUCTION("Construction"),
+		SAILING("Sailing");
+		
+		private final String name;
+		
+		JebScapeSkill(String name)
+		{
+			this.name = name;
+		}
+		
+		public String getName()
+		{
+			return name;
+		}
+		
+		public String toString()
+		{
+			return name;
+		}
+	};
+	
 	@ConfigSection(
 			position = 0,
 			name = "Megaserver",
@@ -76,13 +121,13 @@ public interface JebScapeConfig extends Config
 	@ConfigItem(
 			position = 4,
 			keyName = "selectSkillLiveHiscores",
-			name = "Skill",
+			name = "Select Skill",
 			description = "Select the skill to watch.",
 			section = liveHiscoresSection
 	)
-	default Skill selectSkillLiveHiscores()
+	default JebScapeSkill selectSkillLiveHiscores()
 	{
-		return Skill.AGILITY;
+		return JebScapeSkill.OVERALL;
 	}
 	
 	@Range(
