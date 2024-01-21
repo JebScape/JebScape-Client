@@ -150,6 +150,12 @@ public class JebScapePlugin extends Plugin
 			accountHashSaltPairs[i].accountKeySalt = 0;
 		}
 		
+		this.useAccountKey = false;
+		this.gameAccountKey = 0;
+		this.chatAccountKey = 0;
+		this.accountKeySalt = 0;
+		this.loginTimeout = 0;
+		
 		profilePinOverlay.cleanup();
 		overlayManager.remove(profilePinOverlay);
 		overlayManager.remove(liveHiscoresOverlay);
@@ -170,7 +176,7 @@ public class JebScapePlugin extends Plugin
 			profilePinOverlay.hide();
 			liveHiscoresOverlay.setContainsData(false);
 			megaserverMod.resetPost200mXpAccumulators();
-			this.loginAttempts = 0;
+			this.loginTimeout = 0;
 			this.accountKeySalt = 0;
 		}
 		else if (gameStateChanged.getGameState() != GameState.LOGGED_IN)
