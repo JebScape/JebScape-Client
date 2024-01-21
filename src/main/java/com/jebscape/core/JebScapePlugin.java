@@ -510,10 +510,18 @@ public class JebScapePlugin extends Plugin
 										.type(ChatMessageType.GAMEMESSAGE)
 										.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
 										.build());
-								
+										
+								this.accountKeySalt = 0;
 								this.chatAccountKey = server.getChatAccountKey();
-								configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash() ^ accountKeySalt);
 								this.loginAttempts = 0;
+								configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash() ^ accountKeySalt);
+								
+								message = new ChatMessageBuilder();
+								message.append(ChatColorType.HIGHLIGHT).append("Click here to create a PIN to secure the JebScape login credentials stored within your RuneLite profile.");
+								chatMessageManager.queue(QueuedMessage.builder()
+										.type(ChatMessageType.GAMEMESSAGE)
+										.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
+										.build());
 							}
 							else if (loginAttempts == 0)
 							{

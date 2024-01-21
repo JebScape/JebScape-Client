@@ -575,19 +575,25 @@ public class JebScapeConnection
 					
 					if (newPacketType == LOGIN_PACKET)
 					{
-						if (!isGameLoggedIn)
-						{
-							// place the initial tick timing info here to serve as a baseline
-							this.currentGameTick = newTick;
-							this.lastReceivedGameTick = newTick;
-						}
+						long newKey = gameServerPacket.buffer.getLong();
+						int version = gameServerPacket.buffer.getInt();
 						
-						// we've received an ACK from the server for our login request
-						this.isGameLoggedIn = true;
-						this.isGameUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
-						this.gameAccountKey = newIsUsingKey ? gameServerPacket.buffer.getLong() : 0;
-						this.gameSessionID = newSessionID;
-						this.gameNumOnlinePlayers = gameServerPacket.buffer.getInt(GAME_SERVER_PACKET_SIZE - 4); // read the last 4 bytes
+						if (version == PROTOCOL_VERSION)
+						{
+							// we've received an ACK from the server for our login request
+							if (!isGameLoggedIn)
+							{
+								// place the initial tick timing info here to serve as a baseline
+								this.currentGameTick = newTick;
+								this.lastReceivedGameTick = newTick;
+							}
+							
+							this.isGameLoggedIn = true;
+							this.isGameUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
+							this.gameAccountKey = newIsUsingKey ? newKey : 0;
+							this.gameSessionID = newSessionID;
+							this.gameNumOnlinePlayers = gameServerPacket.buffer.getInt(GAME_SERVER_PACKET_SIZE - 4); // read the last 4 bytes
+						}
 					}
 					
 					if (isGameLoggedIn && newPacketType == GAME_PACKET && gameSessionID == newSessionID)
@@ -635,19 +641,25 @@ public class JebScapeConnection
 					
 					if (newPacketType == LOGIN_PACKET)
 					{
-						// we've received an ACK from the server for our login request
-						if (!isChatLoggedIn)
-						{
-							// place the initial tick timing info here to serve as a baseline
-							this.currentChatTick = newTick;
-							this.lastReceivedChatTick = newTick;
-						}
+						long newKey = chatServerPacket.buffer.getLong();
+						int version = chatServerPacket.buffer.getInt();
 						
-						this.isChatLoggedIn = true;
-						this.isChatUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
-						this.chatAccountKey = newIsUsingKey ? chatServerPacket.buffer.getLong() : 0;
-						this.chatSessionID = newSessionID;
-						this.chatNumOnlinePlayers = chatServerPacket.buffer.getInt(CHAT_SERVER_PACKET_SIZE - 4); // read the last 4 bytes
+						if (version == PROTOCOL_VERSION)
+						{
+							// we've received an ACK from the server for our login request
+							if (!isChatLoggedIn)
+							{
+								// place the initial tick timing info here to serve as a baseline
+								this.currentChatTick = newTick;
+								this.lastReceivedChatTick = newTick;
+							}
+							
+							this.isChatLoggedIn = true;
+							this.isChatUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
+							this.chatAccountKey = newIsUsingKey ? newKey : 0;
+							this.chatSessionID = newSessionID;
+							this.chatNumOnlinePlayers = chatServerPacket.buffer.getInt(CHAT_SERVER_PACKET_SIZE - 4); // read the last 4 bytes
+						}
 					}
 					
 					if (isChatLoggedIn && newPacketType == CHAT_PACKET && chatSessionID == newSessionID)
