@@ -28,6 +28,7 @@ import net.runelite.api.*;
 import net.runelite.api.coords.*;
 import net.runelite.api.events.*;
 import net.runelite.api.kit.*;
+import net.runelite.client.chat.*;
 import net.runelite.client.util.Text;
 import static net.runelite.api.NpcID.*;
 import java.nio.charset.*;
@@ -51,6 +52,7 @@ public class MegaserverMod
 	private Client client;
 	private JebScapeConnection server;
 	private JebScapeLiveHiscoresOverlay liveHiscoresOverlay;
+	private ChatMessageManager chatMessageManager;
 	private JebScapeModelLoader modelLoader = new JebScapeModelLoader();
 	private int[] coreData = new int[3];
 	private int[] gameSubData = new int[4];
@@ -74,18 +76,18 @@ public class MegaserverMod
 	private int[] bodyPartIDs = new int[3];
 	private String chatMessageToSend = "";
 	
-	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay, JebScapeMinimapOverlay minimapOverlay, JebScapeLiveHiscoresOverlay liveHiscoresOverlay)
+	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay, JebScapeMinimapOverlay minimapOverlay, JebScapeLiveHiscoresOverlay liveHiscoresOverlay, ChatMessageManager chatMessageManager)
 	{
 		this.client = client;
 		this.server = server;
 		
 		modelLoader.init(client);
 		
-		selfGhost.init(client);
+		selfGhost.init(client, chatMessageManager);
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
 			ghosts[i] = new JebScapeActor();
-			ghosts[i].init(client);
+			ghosts[i].init(client, chatMessageManager);
 			this.prevGhostCapeID[i] = 31;
 			this.ghostCapeID[i] = 31;
 			this.ghostsDirty[i] = true;
@@ -96,6 +98,8 @@ public class MegaserverMod
 		
 		this.liveHiscoresOverlay = liveHiscoresOverlay;
 		liveHiscoresOverlay.setContainsData(false);
+		
+		this.chatMessageManager = chatMessageManager;
 	}
 	
 	// must only be called once logged in
@@ -824,7 +828,7 @@ public class MegaserverMod
 			}
 		}
 		
-		return server.sendGameData(coreData, gameSubData, extraChatData) ? 12 : 0;
+		return server.sendGameData(coreData, gameSubData, extraChatData) ? 12 : 0; // TODO: Why are we returning 12 here?
 	}
 	
 	public void onClientTick(ClientTick clientTick)

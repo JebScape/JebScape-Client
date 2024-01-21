@@ -24,14 +24,13 @@
  */
 package com.jebscape.core;
 
-import com.google.common.eventbus.*;
 import com.google.inject.Provides;
 
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
-import net.runelite.api.widgets.*;
 import net.runelite.api.events.*;
+import net.runelite.api.widgets.*;
 import net.runelite.client.chat.*;
 import net.runelite.client.callback.*;
 import net.runelite.client.config.*;
@@ -59,6 +58,8 @@ public class JebScapePlugin extends Plugin
 	@Inject
 	private JebScapeLiveHiscoresOverlay liveHiscoresOverlay;
 	@Inject
+	private JebScapeProfilePinOverlay profilePinOverlay;
+	@Inject
 	private ClientThread clientThread;
 	@Inject
 	private JebScapeConfig config;
@@ -72,7 +73,19 @@ public class JebScapePlugin extends Plugin
 	private boolean useAccountKey = false;
 	private long gameAccountKey = 0;
 	private long chatAccountKey = 0;
+	private long accountKeySalt = 0;
+	private boolean replaceAccountKeySalt = false;
 	private int loginTimeout = 0;
+	private int loginAttempts = 0;
+	
+	private final static int NUM_HASH_SALT_PAIRS = 4;
+	private static class AccountHashSaltPair
+	{
+		long accountHash;
+		long accountKeySalt;
+	}
+	private AccountHashSaltPair[] accountHashSaltPairs = new AccountHashSaltPair[NUM_HASH_SALT_PAIRS];
+	private int accountHashSaltPairIndex = -1;
 	
 	@Override
 	protected void startUp() throws Exception
@@ -86,15 +99,24 @@ public class JebScapePlugin extends Plugin
 		actorIndicatorOverlay.init(client);
 		minimapOverlay.init(client);
 		liveHiscoresOverlay.init(client);
+		profilePinOverlay.init(client, this);
 		
 		overlayManager.add(actorIndicatorOverlay);
 		overlayManager.add(minimapOverlay);
 		overlayManager.add(liveHiscoresOverlay);
+		overlayManager.add(profilePinOverlay);
+		
+		for (int i = 0; i < NUM_HASH_SALT_PAIRS; i++)
+		{
+			accountHashSaltPairs[i] = new AccountHashSaltPair();
+			accountHashSaltPairs[i].accountHash = 0;
+			accountHashSaltPairs[i].accountKeySalt = 0;
+		}
 		
 		clientThread.invoke(() ->
 		{
 			useMegaserverMod = true;
-			megaserverMod.init(client, server, actorIndicatorOverlay, minimapOverlay, liveHiscoresOverlay);
+			megaserverMod.init(client, server, actorIndicatorOverlay, minimapOverlay, liveHiscoresOverlay, chatMessageManager);
 			
 			if (configManager.getConfiguration("jebscape", "showSelfGhost", boolean.class))
 				megaserverMod.showSelfGhost();
@@ -110,8 +132,6 @@ public class JebScapePlugin extends Plugin
 			megaserverMod.setLiveHiscoresSkillType(skill.ordinal());
 			megaserverMod.setLiveHiscoresStartRank(configManager.getConfiguration("jebscape", "startRankLiveHiscores", int.class));
 		});
-		
-		loginTimeout = 0;
 	}
 	
 	@Override
@@ -124,6 +144,14 @@ public class JebScapePlugin extends Plugin
 			megaserverMod.stop();
 		});
 		
+		for (int i = 0; i < NUM_HASH_SALT_PAIRS; i++)
+		{
+			accountHashSaltPairs[i].accountHash = 0;
+			accountHashSaltPairs[i].accountKeySalt = 0;
+		}
+		
+		profilePinOverlay.cleanup();
+		overlayManager.remove(profilePinOverlay);
 		overlayManager.remove(liveHiscoresOverlay);
 		overlayManager.remove(minimapOverlay);
 		overlayManager.remove(actorIndicatorOverlay);
@@ -139,8 +167,11 @@ public class JebScapePlugin extends Plugin
 		if (gameStateChanged.getGameState() != GameState.LOGGED_IN && client.getGameState() != GameState.LOADING)
 		{
 			server.logout();
+			profilePinOverlay.hide();
 			liveHiscoresOverlay.setContainsData(false);
 			megaserverMod.resetPost200mXpAccumulators();
+			this.loginAttempts = 0;
+			this.accountKeySalt = 0;
 		}
 		else if (gameStateChanged.getGameState() != GameState.LOGGED_IN)
 		{
@@ -211,6 +242,93 @@ public class JebScapePlugin extends Plugin
 		}
 	}
 	
+	public void setAccountKeySalt(int[] pinValues)
+	{
+		this.accountKeySalt = (long)pinValues[0] << 4;
+		this.accountKeySalt |= (long)pinValues[1] << 16;
+		this.accountKeySalt |= (long)pinValues[2] << 36;
+		this.accountKeySalt |= (long)pinValues[3] << 60;
+		
+		profilePinOverlay.hide();
+		
+		clientThread.invokeLater(() ->
+		{
+			long accountHash = client.getAccountHash();
+			boolean foundExistingPair = false;
+			for (int i = 0; i < NUM_HASH_SALT_PAIRS; i++)
+			{
+				if (accountHashSaltPairs[i].accountHash == accountHash)
+				{
+					this.accountHashSaltPairs[i].accountKeySalt = accountKeySalt;
+					this.accountHashSaltPairIndex = i;
+					foundExistingPair = true;
+					break;
+				}
+			}
+			
+			if (!foundExistingPair)
+			{
+				this.accountHashSaltPairIndex = (accountHashSaltPairIndex + 1) % NUM_HASH_SALT_PAIRS;
+				this.accountHashSaltPairs[accountHashSaltPairIndex].accountHash = accountHash;
+				this.accountHashSaltPairs[accountHashSaltPairIndex].accountKeySalt = accountKeySalt;
+			}
+			
+			ChatMessageBuilder message;
+			if (replaceAccountKeySalt)
+			{
+				configManager.setRSProfileConfiguration("JebScape", "AccountKeyGame", gameAccountKey ^ client.getAccountHash() ^ accountKeySalt);
+				configManager.setRSProfileConfiguration("JebScape", "AccountKey", gameAccountKey ^ client.getAccountHash() ^ accountKeySalt);
+				replaceAccountKeySalt = false;
+				
+				if (accountKeySalt == 0)
+				{
+					message = new ChatMessageBuilder();
+					message.append(ChatColorType.HIGHLIGHT).append("Your JebScape PIN has been removed.");
+					chatMessageManager.queue(QueuedMessage.builder()
+							.type(ChatMessageType.GAMEMESSAGE)
+							.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
+							.build());
+					
+					message = new ChatMessageBuilder();
+					message.append(ChatColorType.NORMAL).append("Click here to create a PIN to secure the JebScape login credentials stored within your RuneLite profile.");
+					chatMessageManager.queue(QueuedMessage.builder()
+							.type(ChatMessageType.WELCOME)
+							.runeLiteFormattedMessage(message.build())
+							.build());
+				}
+				else
+				{
+					message = new ChatMessageBuilder();
+					message.append(ChatColorType.HIGHLIGHT).append("Your new JebScape PIN has been created. It will apply to all JebScape accounts linked to your RuneLite profile.");
+					chatMessageManager.queue(QueuedMessage.builder()
+							.type(ChatMessageType.GAMEMESSAGE)
+							.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
+							.build());
+					
+					message = new ChatMessageBuilder();
+					message.append(ChatColorType.NORMAL).append("Click here if you would like to change your JebScape PIN.");
+					chatMessageManager.queue(QueuedMessage.builder()
+							.type(ChatMessageType.WELCOME)
+							.runeLiteFormattedMessage(message.build())
+							.build());
+				}
+			}
+			else
+			{
+				message = new ChatMessageBuilder();
+				message.append(ChatColorType.NORMAL).append("Attempting to log in...");
+				chatMessageManager.queue(QueuedMessage.builder()
+						.type(ChatMessageType.WELCOME)
+						.runeLiteFormattedMessage(message.build())
+						.build());
+				
+				server.logout();
+				megaserverMod.resetPost200mXpAccumulators();
+				megaserverMod.stop();
+			}
+		});
+	}
+	
 	public boolean getUseAccountKey()
 	{
 		return useAccountKey;
@@ -239,6 +357,20 @@ public class JebScapePlugin extends Plugin
 			boolean prevChatLoginStatus = server.isChatLoggedIn();
 			RuneScapeProfileType rsProfileType = RuneScapeProfileType.getCurrent(client);
 			
+			if (!server.isGameLoggedIn() || !server.isChatLoggedIn())
+			{
+				long accountHash = client.getAccountHash();
+				for (int i = 0; i < NUM_HASH_SALT_PAIRS; i++)
+				{
+					if (accountHashSaltPairs[i].accountHash == accountHash)
+					{
+						this.accountKeySalt = accountHashSaltPairs[i].accountKeySalt;
+						this.accountHashSaltPairIndex = i;
+						break;
+					}
+				}
+			}
+			
 			if (!server.isGameLoggedIn())
 			{
 				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "AccountKeyGame");
@@ -247,7 +379,7 @@ public class JebScapePlugin extends Plugin
 					Long key = Long.parseLong(keyConfig);
 					if (key != null)
 					{
-						this.gameAccountKey = key ^ client.getAccountHash();
+						this.gameAccountKey = accountKeySalt ^ client.getAccountHash() ^ key;
 					}
 					else
 					{
@@ -268,7 +400,7 @@ public class JebScapePlugin extends Plugin
 					Long key = Long.parseLong(keyConfig);
 					if (key != null)
 					{
-						this.chatAccountKey = key ^ client.getAccountHash();
+						this.chatAccountKey = accountKeySalt ^ client.getAccountHash() ^ key;
 					}
 					else
 					{
@@ -350,7 +482,7 @@ public class JebScapePlugin extends Plugin
 						this.gameAccountKey = server.getGameAccountKey();
 						if (gameAccountKey != 0)
 						{
-							configManager.setRSProfileConfiguration("JebScape", "AccountKeyGame", gameAccountKey ^ client.getAccountHash());
+							configManager.setRSProfileConfiguration("JebScape", "AccountKeyGame", gameAccountKey ^ client.getAccountHash() ^ accountKeySalt);
 						}
 					}
 				}
@@ -359,29 +491,90 @@ public class JebScapePlugin extends Plugin
 				{
 					// the chat key is what matters the most right now, so let's prioritize it
 					boolean chatLoggedInAsGuest = server.isChatGuest();
-					if (!chatLoggedInAsGuest && useAccountKey && chatAccountKey != server.getChatAccountKey())
+					if (useAccountKey)
 					{
-						if (chatAccountKey == 0)
+						if (chatAccountKey != server.getChatAccountKey())
 						{
-							message = new ChatMessageBuilder();
-							message.append(ChatColorType.HIGHLIGHT).append("Your new JebScape account has been automatically created and linked to your OSRS account. Your JebScape login details have been saved to your RuneLite profile and will automatically log you in each time you log into your OSRS account.");
-							chatMessageManager.queue(QueuedMessage.builder()
-									.type(ChatMessageType.GAMEMESSAGE)
-									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
-									.build());
+							if (!chatLoggedInAsGuest && chatAccountKey == 0)
+							{
+								message = new ChatMessageBuilder();
+								message.append(ChatColorType.HIGHLIGHT).append("Your new JebScape account has been automatically created and linked to your OSRS account and RuneLite profile.");
+								chatMessageManager.queue(QueuedMessage.builder()
+										.type(ChatMessageType.GAMEMESSAGE)
+										.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
+										.build());
+								
+								this.chatAccountKey = server.getChatAccountKey();
+								configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash() ^ accountKeySalt);
+								this.loginAttempts = 0;
+							}
+							else if (loginAttempts == 0)
+							{
+								// The initial key sent was not valid; an incorrect PIN was tried, so let's get the user to enter in their PIN
+								message = new ChatMessageBuilder();
+								message.append(ChatColorType.HIGHLIGHT).append("You are logged in as a guest. Enter your PIN to fully log into your JebScape account.");
+								chatMessageManager.queue(QueuedMessage.builder()
+										.type(ChatMessageType.GAMEMESSAGE)
+										.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
+										.build());
+								
+								profilePinOverlay.show();
+								this.loginAttempts++;
+							}
+							else if (loginAttempts < 4)
+							{
+								// Attempted to log in with PIN but failed
+								message = new ChatMessageBuilder();
+								message.append(ChatColorType.HIGHLIGHT).append("Login failed. Try again. You are logged in as a guest. Enter your PIN to fully log into your JebScape account.");
+								chatMessageManager.queue(QueuedMessage.builder()
+										.type(ChatMessageType.GAMEMESSAGE)
+										.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
+										.build());
+								
+								profilePinOverlay.show();
+								this.loginAttempts++;
+							}
+							else
+							{
+								// Too many failed attempts. Give up for now.
+								message = new ChatMessageBuilder();
+								message.append(ChatColorType.HIGHLIGHT).append("Login attempts exhausted. Try again later. You will remain logged in as a guest.");
+								chatMessageManager.queue(QueuedMessage.builder()
+										.type(ChatMessageType.GAMEMESSAGE)
+										.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
+										.build());
+							}
 						}
 						else
 						{
 							message = new ChatMessageBuilder();
-							message.append(ChatColorType.HIGHLIGHT).append("Invalid login details. A new JebScape account has been automatically created instead and replaced the previous login details stored in your RuneLite profile. Please contact Jebrim on Discord if you see this message.");
+							message.append(ChatColorType.HIGHLIGHT).append("You successfully logged into your JebScape account.");
 							chatMessageManager.queue(QueuedMessage.builder()
 									.type(ChatMessageType.GAMEMESSAGE)
-									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=f90202"))
+									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
 									.build());
+							
+							this.loginAttempts = 0;
+							
+							if (accountKeySalt == 0)
+							{
+								message = new ChatMessageBuilder();
+								message.append(ChatColorType.HIGHLIGHT).append("Click here to create a PIN to secure the JebScape login credentials stored within your RuneLite profile.");
+								chatMessageManager.queue(QueuedMessage.builder()
+										.type(ChatMessageType.GAMEMESSAGE)
+										.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
+										.build());
+							}
+							else
+							{
+								message = new ChatMessageBuilder();
+								message.append(ChatColorType.NORMAL).append("Click here if you would like to change your JebScape PIN.");
+								chatMessageManager.queue(QueuedMessage.builder()
+										.type(ChatMessageType.WELCOME)
+										.runeLiteFormattedMessage(message.build())
+										.build());
+							}
 						}
-						
-						this.chatAccountKey = server.getChatAccountKey();
-						configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash());
 					}
 					else if (chatLoggedInAsGuest)
 					{
@@ -391,7 +584,7 @@ public class JebScapePlugin extends Plugin
 							message.append(ChatColorType.HIGHLIGHT).append("You are logged in as a guest. Account login requires a standard world.");
 							chatMessageManager.queue(QueuedMessage.builder()
 									.type(ChatMessageType.GAMEMESSAGE)
-									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))//"col=12b500"))
+									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
 									.build());
 						}
 						else
@@ -400,14 +593,74 @@ public class JebScapePlugin extends Plugin
 							message.append(ChatColorType.HIGHLIGHT).append("You are logged in as a guest. Only one account may be created per day.");
 							chatMessageManager.queue(QueuedMessage.builder()
 									.type(ChatMessageType.GAMEMESSAGE)
-									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))//"col=12b500"))
+									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
 									.build());
 							this.useAccountKey = false;
 						}
 					}
 				}
+				
+				Widget chatWidget = client.getWidget(ComponentID.CHATBOX_MESSAGE_LINES);
+				if (chatWidget != null && isChatLoggedIn && !server.isChatGuest())
+				{
+					// TODO: Can we make this only run only when each new message is added instead of every game tick?
+					if (accountKeySalt == 0)
+					{
+						for (Widget w: chatWidget.getDynamicChildren())
+						{
+							if (Text.removeTags(w.getText()).contains("Click here to create a PIN to secure the JebScape login credentials stored within your RuneLite profile."))
+							{
+								clientThread.invokeLater(() -> {
+									w.setAction(1, "Create new JebScape PIN.");
+									w.setOnOpListener((JavaScriptCallback) this::clickSetNewProfilePin);
+									w.setHasListener(true);
+									w.setNoClickThrough(true);
+									w.revalidate();
+								});
+							}
+							else
+							{
+								clientThread.invokeLater(() -> {
+									w.setHasListener(false);
+									w.setNoClickThrough(false);
+									w.revalidate();
+								});
+							}
+						}
+					}
+					else
+					{
+						for (Widget w: chatWidget.getDynamicChildren())
+						{
+							if (Text.removeTags(w.getText()).contains("Click here if you would like to change your JebScape PIN.") )
+							{
+								clientThread.invokeLater(() -> {
+									w.setAction(1, "Set New JebScape PIN");
+									w.setOnOpListener((JavaScriptCallback) this::clickSetNewProfilePin);
+									w.setHasListener(true);
+									w.setNoClickThrough(true);
+									w.revalidate();
+								});
+							}
+							else
+							{
+								clientThread.invokeLater(() -> {
+									w.setHasListener(false);
+									w.setNoClickThrough(false);
+									w.revalidate();
+								});
+							}
+						}
+					}
+				}
 			}
 		}
+	}
+	
+	protected void clickSetNewProfilePin(ScriptEvent ev)
+	{
+		this.replaceAccountKeySalt = true;
+		profilePinOverlay.show();
 	}
 	
 	@Subscribe

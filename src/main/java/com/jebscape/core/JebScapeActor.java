@@ -26,10 +26,12 @@ package com.jebscape.core;
 
 import net.runelite.api.*;
 import net.runelite.api.coords.*;
+import net.runelite.client.chat.*;
 
 public class JebScapeActor
 {
 	private Client client;
+	private ChatMessageManager chatMessageManager;
 	private RuneLiteObject rlObject;
 	private Model defaultModel;
 	private int world;
@@ -94,12 +96,13 @@ public class JebScapeActor
 	int[] animationPoseIDs = new int[8];
 	
 	
-	public void init(Client client)
+	public void init(Client client, ChatMessageManager chatMessageManager)
 	{
 		this.client = client;
 		this.rlObject = client.createRuneLiteObject();
 		for (int i = 0; i < MAX_TARGET_QUEUE_SIZE; i++)
 			targetQueue[i] = new Target();
+		this.chatMessageManager = chatMessageManager;
 	}
 	
 	public void setDefaultModel(Model model)
@@ -222,8 +225,15 @@ public class JebScapeActor
 	{
 		this.chatMessage = chatMessage;
 		this.remainingOverheadChatMessageTime = MAX_CHAT_MESSAGE_TIME;
-		// TODO: add this to a global chat message queue so we don't get our message dropped if too many occur at once
-		client.addChatMessage(ChatMessageType.PUBLICCHAT, actorName, chatMessage, null);
+		
+		ChatMessageBuilder message = new ChatMessageBuilder();
+		message.append(ChatColorType.NORMAL).append(chatMessage);
+		chatMessageManager.queue(QueuedMessage.builder()
+				.type(ChatMessageType.PUBLICCHAT)
+				.name(actorName)
+				.runeLiteFormattedMessage(message.build())
+				.sender(null)
+				.build());
 	}
 	
 	public String getChatMessage()
