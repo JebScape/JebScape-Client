@@ -143,6 +143,11 @@ public class JebScapeModelLoader
 	
 	public Model loadPlayerCloneRenderable()
 	{
+		if (gameDB == null)
+		{
+			this.gameDB = client.getIndexConfig();
+		}
+		
 		Player player = client.getLocalPlayer();
 		PlayerComposition playerComposition = player.getPlayerComposition();
 		int gender = playerComposition.getGender();
