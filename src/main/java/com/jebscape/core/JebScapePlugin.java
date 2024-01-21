@@ -394,6 +394,7 @@ public class JebScapePlugin extends Plugin
 			
 			if (!server.isChatLoggedIn())
 			{
+				configManager.unsetRSProfileConfiguration("JebScape", "JebScapeAccountKey"); // clear out any obsolete ones players might still have lying around
 				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "AccountKey");
 				if (keyConfig != null)
 				{
