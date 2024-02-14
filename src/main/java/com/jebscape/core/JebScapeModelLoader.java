@@ -338,28 +338,28 @@ public class JebScapeModelLoader
 			}
 		}
 		
-		kitIDs[0] = hairKitMap[bodyPartIDs[0]];
-		kitIDs[1] = jawKitMap[bodyPartIDs[1]];
-		kitIDs[2] = armsKitMap[bodyPartIDs[2]];
+		kitIDs[0] = bodyPartIDs[0] >= 0 ? hairKitMap[bodyPartIDs[0]] : -1;
+		kitIDs[0] = kitIDs[0] >= 0 ? kitIDs[0] : hairKitMap[0];
+		kitIDs[1] = bodyPartIDs[1] >= 0 ? jawKitMap[bodyPartIDs[1]] : -1;
+		kitIDs[1] = kitIDs[1] >= 0 ? kitIDs[1] : jawKitMap[0];
+		kitIDs[2] = bodyPartIDs[2] >= 0 ? armsKitMap[bodyPartIDs[2]] : -1;
+		kitIDs[2] = kitIDs[2] >= 0 ? kitIDs[2] : armsKitMap[0];
+		
 		for (int i = 0; i < kitIDs.length; i++)
 		{
-			int kitID = kitIDs[i];
-			if (kitID >= 0)
+			byte[] kitData;
+			try
 			{
-				byte[] kitData;
-				try
-				{
-					kitData = gameDB.loadData(KIT_CONFIG_TYPE, kitID);
-				}
-				catch (Exception e)
-				{
-					continue;
-				}
-				RuneLiteKitDefinition kitDefinition = kitLoader.load(kitID, kitData);
-				for (int j = 0; j < kitDefinition.models.length; j++)
-				{
-					modelIDs[numModelIDs++] = kitDefinition.models[j];
-				}
+				kitData = gameDB.loadData(KIT_CONFIG_TYPE, kitIDs[i]);
+			}
+			catch (Exception e)
+			{
+				continue;
+			}
+			RuneLiteKitDefinition kitDefinition = kitLoader.load(kitIDs[i], kitData);
+			for (int j = 0; j < kitDefinition.models.length; j++)
+			{
+				modelIDs[numModelIDs++] = kitDefinition.models[j];
 			}
 		}
 		
