@@ -194,6 +194,43 @@ public class JebScapePlugin extends Plugin
 	}
 	
 	@Subscribe
+	public void onCommandExecuted(CommandExecuted commandExecuted)
+	{
+		if (commandExecuted.getCommand().contentEquals("jeb"))
+		{
+			boolean success = false;
+			String[] args = commandExecuted.getArguments();
+			if (args.length == 2)
+			{
+				try
+				{
+					int cmdType = Integer.parseInt(args[0]);
+					int cmdArg = Integer.parseInt(args[1]);
+					
+					if (megaserverMod.isActive())
+						megaserverMod.onCommandExecuted(cmdType, cmdArg);
+					
+					success = true;
+				}
+				catch (Exception e)
+				{
+					success = false;
+				}
+			}
+			
+			if (!success)
+			{
+				ChatMessageBuilder message = new ChatMessageBuilder();
+				message.append(ChatColorType.HIGHLIGHT).append("Invalid JebScape command.");
+				chatMessageManager.queue(QueuedMessage.builder()
+						.type(ChatMessageType.GAMEMESSAGE)
+						.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
+						.build());
+			}
+		}
+	}
+	
+	@Subscribe
 	public void onAnimationChanged(AnimationChanged animationChanged)
 	{
 		if (megaserverMod.isActive())
@@ -500,28 +537,41 @@ public class JebScapePlugin extends Plugin
 					boolean chatLoggedInAsGuest = server.isChatGuest();
 					if (useAccountKey)
 					{
-						if (chatAccountKey != server.getChatAccountKey())
+						if (chatAccountKey != server.getChatAccountKey() || chatAccountKey == 0)
 						{
-							if (!chatLoggedInAsGuest && chatAccountKey == 0)
+							if (chatAccountKey == 0)
 							{
-								message = new ChatMessageBuilder();
-								message.append(ChatColorType.HIGHLIGHT).append("Your new JebScape account has been automatically created and linked to your OSRS account and RuneLite profile.");
-								chatMessageManager.queue(QueuedMessage.builder()
-										.type(ChatMessageType.GAMEMESSAGE)
-										.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
-										.build());
-										
-								this.accountKeySalt = 0;
-								this.chatAccountKey = server.getChatAccountKey();
-								this.loginAttempts = 0;
-								configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash() ^ accountKeySalt);
-								
-								message = new ChatMessageBuilder();
-								message.append(ChatColorType.HIGHLIGHT).append("Click here to create a PIN to secure the JebScape login credentials stored within your RuneLite profile.");
-								chatMessageManager.queue(QueuedMessage.builder()
-										.type(ChatMessageType.GAMEMESSAGE)
-										.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
-										.build());
+								if (!chatLoggedInAsGuest)
+								{
+									message = new ChatMessageBuilder();
+									message.append(ChatColorType.HIGHLIGHT).append("Your new JebScape account has been automatically created and linked to your OSRS account and RuneLite profile.");
+									chatMessageManager.queue(QueuedMessage.builder()
+											.type(ChatMessageType.GAMEMESSAGE)
+											.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
+											.build());
+									
+									this.accountKeySalt = 0;
+									this.chatAccountKey = server.getChatAccountKey();
+									this.loginAttempts = 0;
+									configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash() ^ accountKeySalt);
+									
+									message = new ChatMessageBuilder();
+									message.append(ChatColorType.HIGHLIGHT).append("Click here to create a PIN to secure the JebScape login credentials stored within your RuneLite profile.");
+									chatMessageManager.queue(QueuedMessage.builder()
+											.type(ChatMessageType.GAMEMESSAGE)
+											.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
+											.build());
+								}
+								else
+								{
+									message = new ChatMessageBuilder();
+									message.append(ChatColorType.HIGHLIGHT).append("You are logged in as a guest. Only one account may be created per day.");
+									chatMessageManager.queue(QueuedMessage.builder()
+											.type(ChatMessageType.GAMEMESSAGE)
+											.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
+											.build());
+									this.useAccountKey = false;
+								}
 							}
 							else if (loginAttempts == 0)
 							{
@@ -593,25 +643,12 @@ public class JebScapePlugin extends Plugin
 					}
 					else if (chatLoggedInAsGuest)
 					{
-						if (rsProfileType != RuneScapeProfileType.STANDARD)
-						{
-							message = new ChatMessageBuilder();
-							message.append(ChatColorType.HIGHLIGHT).append("You are logged in as a guest. Account login requires a standard world.");
-							chatMessageManager.queue(QueuedMessage.builder()
-									.type(ChatMessageType.GAMEMESSAGE)
-									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
-									.build());
-						}
-						else
-						{
-							message = new ChatMessageBuilder();
-							message.append(ChatColorType.HIGHLIGHT).append("You are logged in as a guest. Only one account may be created per day.");
-							chatMessageManager.queue(QueuedMessage.builder()
-									.type(ChatMessageType.GAMEMESSAGE)
-									.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
-									.build());
-							this.useAccountKey = false;
-						}
+						message = new ChatMessageBuilder();
+						message.append(ChatColorType.HIGHLIGHT).append("You are logged in as a guest. Account login requires a standard world.");
+						chatMessageManager.queue(QueuedMessage.builder()
+								.type(ChatMessageType.GAMEMESSAGE)
+								.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
+								.build());
 					}
 				}
 				
@@ -626,7 +663,7 @@ public class JebScapePlugin extends Plugin
 							if (Text.removeTags(w.getText()).contains("Click here to create a PIN to secure the JebScape login credentials stored within your RuneLite profile."))
 							{
 								clientThread.invokeLater(() -> {
-									w.setAction(1, "Create new JebScape PIN.");
+									w.setAction(1, "Create new JebScape PIN");
 									w.setOnOpListener((JavaScriptCallback) this::clickSetNewProfilePin);
 									w.setHasListener(true);
 									w.setNoClickThrough(true);

@@ -38,6 +38,7 @@ public class MegaserverMod
 {
 	public final int MEGASERVER_MOVEMENT_UPDATE_CMD = 0x1; // 0001
 	public final int LIVE_HISCORES_STATS_UPDATE_CMD = 0x2; // 0010
+	public final int ADMIN_CONTROL_CMD = 0x4; // 0100
 	private final int MAX_GHOSTS = 64;
 	private static final int NUM_SKILLS = 24; // includes upcoming Sailing skill
 	private int post200mXpAccumulator[] = new int[NUM_SKILLS];
@@ -75,6 +76,8 @@ public class MegaserverMod
 	private int[] equipmentIDs = new int[7];
 	private int[] bodyPartIDs = new int[3];
 	private String chatMessageToSend = "";
+	private int cmdType = 0;
+	private int cmdArg = 0;
 	
 	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay, JebScapeMinimapOverlay minimapOverlay, JebScapeLiveHiscoresOverlay liveHiscoresOverlay, ChatMessageManager chatMessageManager)
 	{
@@ -179,6 +182,13 @@ public class MegaserverMod
 				this.chatMessageToSend = chatMessage.getMessage();
 			}
 		}
+	}
+	
+	public void onCommandExecuted(int cmdType, int cmdArg)
+	{
+		this.cmdType = cmdType;
+		this.cmdArg = cmdArg;
+		this.chatMessageToSend = " ";
 	}
 	
 	public void onAnimationChanged(AnimationChanged animationChanged)
@@ -699,6 +709,7 @@ public class MegaserverMod
 		equipmentIDs[4] = allEquipmentIDs[KitType.LEGS.ordinal()];
 		equipmentIDs[5] = allEquipmentIDs[KitType.HANDS.ordinal()];
 		equipmentIDs[6] = allEquipmentIDs[KitType.BOOTS.ordinal()];
+		//int hairID = playerComposition.getKitId(KitType.HAIR);
 		bodyPartIDs[0] = playerComposition.getKitId(KitType.HAIR) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.HAIR)] : 31;
 		bodyPartIDs[1] = playerComposition.getKitId(KitType.JAW) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.JAW)] : 31;
 		bodyPartIDs[2] = playerComposition.getKitId(KitType.ARMS) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.ARMS)] : 31;
@@ -765,12 +776,26 @@ public class MegaserverMod
 		
 		byte[] extraChatData = new byte[96];
 		
-		// check if we've recently sent a chat message
-		if (!chatMessageToSend.isEmpty())
+		 if (!chatMessageToSend.isEmpty()) // check if we've recently sent a chat message
 		{
-			extraChatData = chatMessageToSend.getBytes(StandardCharsets.UTF_8);
+			if (cmdType != 0)
+			{
+				coreData[0] |= ADMIN_CONTROL_CMD;
+				extraChatData[91] = (byte)(cmdType & 0xFF);
+				extraChatData[92] = (byte)(cmdArg);
+				extraChatData[93] = (byte)((cmdArg) >>> 8);
+				extraChatData[94] = (byte)((cmdArg) >>> 16);
+				extraChatData[95] = (byte)((cmdArg) >>> 24);
+				
+				this.cmdType = 0;
+				this.cmdArg = 0;
+			}
+			else
+			{
+				extraChatData = chatMessageToSend.getBytes(StandardCharsets.UTF_8);
+			}
 			
-			this.chatMessageToSend = ""; // we only want to send it once
+			this.chatMessageToSend = "";
 		}
 		else
 		{
