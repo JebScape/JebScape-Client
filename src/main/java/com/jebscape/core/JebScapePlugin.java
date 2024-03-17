@@ -155,6 +155,7 @@ public class JebScapePlugin extends Plugin
 		this.chatAccountKey = 0;
 		this.accountKeySalt = 0;
 		this.loginTimeout = 0;
+		this.replaceAccountKeySalt = false;
 		
 		profilePinOverlay.cleanup();
 		overlayManager.remove(profilePinOverlay);
@@ -319,40 +320,52 @@ public class JebScapePlugin extends Plugin
 			ChatMessageBuilder message;
 			if (replaceAccountKeySalt)
 			{
-				configManager.setRSProfileConfiguration("JebScape", "AccountKeyGame", gameAccountKey ^ client.getAccountHash() ^ accountKeySalt);
-				configManager.setRSProfileConfiguration("JebScape", "AccountKey", gameAccountKey ^ client.getAccountHash() ^ accountKeySalt);
-				replaceAccountKeySalt = false;
-				
-				if (accountKeySalt == 0)
+				this.replaceAccountKeySalt = false;
+				if (chatAccountKey != 0)
 				{
-					message = new ChatMessageBuilder();
-					message.append(ChatColorType.HIGHLIGHT).append("Your JebScape PIN has been removed.");
-					chatMessageManager.queue(QueuedMessage.builder()
-							.type(ChatMessageType.GAMEMESSAGE)
-							.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
-							.build());
-					
-					message = new ChatMessageBuilder();
-					message.append(ChatColorType.NORMAL).append("Click here to create a PIN to secure the JebScape login credentials stored within your RuneLite profile.");
-					chatMessageManager.queue(QueuedMessage.builder()
-							.type(ChatMessageType.WELCOME)
-							.runeLiteFormattedMessage(message.build())
-							.build());
+					configManager.setRSProfileConfiguration("JebScape", "KeyGame", gameAccountKey ^ client.getAccountHash() ^ accountKeySalt);
+					configManager.setRSProfileConfiguration("JebScape", "Key", chatAccountKey ^ client.getAccountHash() ^ accountKeySalt);
+				
+					if (accountKeySalt == 0)
+					{
+						message = new ChatMessageBuilder();
+						message.append(ChatColorType.HIGHLIGHT).append("Your JebScape PIN has been removed.");
+						chatMessageManager.queue(QueuedMessage.builder()
+								.type(ChatMessageType.GAMEMESSAGE)
+								.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
+								.build());
+						
+						message = new ChatMessageBuilder();
+						message.append(ChatColorType.NORMAL).append("Click here to create a PIN to secure the JebScape login credentials stored within your RuneLite profile.");
+						chatMessageManager.queue(QueuedMessage.builder()
+								.type(ChatMessageType.WELCOME)
+								.runeLiteFormattedMessage(message.build())
+								.build());
+					}
+					else
+					{
+						message = new ChatMessageBuilder();
+						message.append(ChatColorType.HIGHLIGHT).append("Your new JebScape PIN has been created. It will apply to all JebScape accounts linked to your RuneLite profile.");
+						chatMessageManager.queue(QueuedMessage.builder()
+								.type(ChatMessageType.GAMEMESSAGE)
+								.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
+								.build());
+						
+						message = new ChatMessageBuilder();
+						message.append(ChatColorType.NORMAL).append("Click here if you would like to change your JebScape PIN.");
+						chatMessageManager.queue(QueuedMessage.builder()
+								.type(ChatMessageType.WELCOME)
+								.runeLiteFormattedMessage(message.build())
+								.build());
+					}
 				}
 				else
 				{
 					message = new ChatMessageBuilder();
-					message.append(ChatColorType.HIGHLIGHT).append("Your new JebScape PIN has been created. It will apply to all JebScape accounts linked to your RuneLite profile.");
+					message.append(ChatColorType.HIGHLIGHT).append("Error setting PIN. Please report this bug in the JebScape Discord server.");
 					chatMessageManager.queue(QueuedMessage.builder()
 							.type(ChatMessageType.GAMEMESSAGE)
-							.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=02f502"))
-							.build());
-					
-					message = new ChatMessageBuilder();
-					message.append(ChatColorType.NORMAL).append("Click here if you would like to change your JebScape PIN.");
-					chatMessageManager.queue(QueuedMessage.builder()
-							.type(ChatMessageType.WELCOME)
-							.runeLiteFormattedMessage(message.build())
+							.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=f50202"))
 							.build());
 				}
 			}
@@ -416,7 +429,7 @@ public class JebScapePlugin extends Plugin
 			
 			if (!server.isGameLoggedIn())
 			{
-				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "AccountKeyGame");
+				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "KeyGame");
 				if (keyConfig != null)
 				{
 					Long key = Long.parseLong(keyConfig);
@@ -437,8 +450,23 @@ public class JebScapePlugin extends Plugin
 			
 			if (!server.isChatLoggedIn())
 			{
-				configManager.unsetRSProfileConfiguration("JebScape", "JebScapeAccountKey"); // clear out any obsolete ones players might still have lying around
 				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "AccountKey");
+				if (keyConfig != null)
+				{
+					ChatMessageBuilder message = new ChatMessageBuilder();
+					message.append(ChatColorType.HIGHLIGHT).append("Due to a recently discovered bug with the PIN system, all JebScape accounts have been reset. " +
+							"This should resolve all PIN-based login issues. Please report any further discovered bugs in the JebScape Discord server.");
+					chatMessageManager.queue(QueuedMessage.builder()
+							.type(ChatMessageType.GAMEMESSAGE)
+							.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
+							.build());
+				}
+				
+				// clear out any obsolete keys players might still have lying around
+				configManager.unsetRSProfileConfiguration("JebScape", "JebScapeAccountKey");
+				configManager.unsetRSProfileConfiguration("JebScape", "AccountKeyGame");
+				configManager.unsetRSProfileConfiguration("JebScape", "AccountKey");
+				keyConfig = configManager.getRSProfileConfiguration("JebScape", "Key");
 				if (keyConfig != null)
 				{
 					Long key = Long.parseLong(keyConfig);
@@ -526,7 +554,7 @@ public class JebScapePlugin extends Plugin
 						this.gameAccountKey = server.getGameAccountKey();
 						if (gameAccountKey != 0)
 						{
-							configManager.setRSProfileConfiguration("JebScape", "AccountKeyGame", gameAccountKey ^ client.getAccountHash() ^ accountKeySalt);
+							configManager.setRSProfileConfiguration("JebScape", "KeyGame", gameAccountKey ^ client.getAccountHash() ^ accountKeySalt);
 						}
 					}
 				}
@@ -553,7 +581,10 @@ public class JebScapePlugin extends Plugin
 									this.accountKeySalt = 0;
 									this.chatAccountKey = server.getChatAccountKey();
 									this.loginAttempts = 0;
-									configManager.setRSProfileConfiguration("JebScape", "AccountKey", chatAccountKey ^ client.getAccountHash() ^ accountKeySalt);
+									if (chatAccountKey != 0)
+									{
+										configManager.setRSProfileConfiguration("JebScape", "Key", chatAccountKey ^ client.getAccountHash() ^ accountKeySalt);
+									}
 									
 									message = new ChatMessageBuilder();
 									message.append(ChatColorType.HIGHLIGHT).append("Click here to create a PIN to secure the JebScape login credentials stored within your RuneLite profile.");

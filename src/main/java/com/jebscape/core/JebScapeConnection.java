@@ -58,7 +58,7 @@ public class JebScapeConnection
 	private int gameNumOnlinePlayers = 0;
 	private int chatNumOnlinePlayers = 0;
 	
-	private static final int PROTOCOL_VERSION = 2;
+	private static final int PROTOCOL_VERSION = 3;
 	private static final int EMPTY_PACKET = 0x0;
 	private static final int LOGIN_PACKET = 0x1;
 	private static final int GAME_PACKET = 0x2;

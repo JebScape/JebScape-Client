@@ -709,7 +709,7 @@ public class MegaserverMod
 		equipmentIDs[4] = allEquipmentIDs[KitType.LEGS.ordinal()];
 		equipmentIDs[5] = allEquipmentIDs[KitType.HANDS.ordinal()];
 		equipmentIDs[6] = allEquipmentIDs[KitType.BOOTS.ordinal()];
-		//int hairID = playerComposition.getKitId(KitType.HAIR);
+		//int hairID = playerComposition.getKitId(KitType.HAIR); TODO: fix female hair
 		bodyPartIDs[0] = playerComposition.getKitId(KitType.HAIR) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.HAIR)] : 31;
 		bodyPartIDs[1] = playerComposition.getKitId(KitType.JAW) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.JAW)] : 31;
 		bodyPartIDs[2] = playerComposition.getKitId(KitType.ARMS) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.ARMS)] : 31;
@@ -717,10 +717,6 @@ public class MegaserverMod
 		
 		if (showSelfGhost)
 		{
-			// debug
-			//selfGhost.setName(player.getName());
-			//selfGhost.setChatMessage("Plane: " + client.getPlane());
-			
 			if ((prevGameTick & 0x1) == 0x1)
 			{
 				boolean modelHasChanged = false;

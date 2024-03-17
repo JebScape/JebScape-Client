@@ -282,6 +282,11 @@ public class JebScapeModelLoader
 	
 	public Model loadPlayerGhostRenderable(int[] equipmentIDs, int[] bodyPartIDs, int gender, int capeID)
 	{
+		if (gameDB == null)
+		{
+			this.gameDB = client.getIndexConfig();
+		}
+		
 		int numModelIDs = 0;
 		
 		for (int i = 0; i < equipmentIDs.length; i++)
