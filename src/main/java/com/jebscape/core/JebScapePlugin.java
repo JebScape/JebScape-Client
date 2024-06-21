@@ -451,16 +451,6 @@ public class JebScapePlugin extends Plugin
 			if (!server.isChatLoggedIn())
 			{
 				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "AccountKey");
-				if (keyConfig != null)
-				{
-					ChatMessageBuilder message = new ChatMessageBuilder();
-					message.append(ChatColorType.HIGHLIGHT).append("Due to a recently discovered bug with the PIN system, all JebScape accounts have been reset. " +
-							"This should resolve all PIN-based login issues. Please report any further discovered bugs in the JebScape Discord server.");
-					chatMessageManager.queue(QueuedMessage.builder()
-							.type(ChatMessageType.GAMEMESSAGE)
-							.runeLiteFormattedMessage(message.build().replaceAll("colHIGHLIGHT", "col=d4f502"))
-							.build());
-				}
 				
 				// clear out any obsolete keys players might still have lying around
 				configManager.unsetRSProfileConfiguration("JebScape", "JebScapeAccountKey");

@@ -772,7 +772,7 @@ public class MegaserverMod
 		
 		byte[] extraChatData = new byte[96];
 		
-		 if (!chatMessageToSend.isEmpty()) // check if we've recently sent a chat message
+		if (!chatMessageToSend.isEmpty()) // check if we've recently sent a chat message
 		{
 			if (cmdType != 0)
 			{
