@@ -43,7 +43,7 @@ public class JebScapeModelLoader
 	private static final int[] hairKitMap = new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 129, 130, 131, 132, 133, 134, 144, 145, 146, 147, 148, 149, 150, 151, -1, -1, -1, -1, -1, -1, -1, -1 };
 	private static final int[] jawKitMap = new int[] { 10, 11, 12, 13, 14, 15, 16, 17, 111, 112, 113, 114, 115, 116, 117, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 	private static final int[] armsKitMap = new int[] { 26, 27, 28, 29, 30, 31, 32, 84, 85, 86, 87, 88, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-	public static int[] kitIDtoBodyPartMap = new int[256];
+	public static int[] kitIDtoBodyPartMap = new int[PlayerComposition.KIT_OFFSET];
 	
 	private static final short[] BODY_COLOURS_1_SOURCE = new short[]{
 			6798, 8741, 25238, 4626, 4550
@@ -88,7 +88,7 @@ public class JebScapeModelLoader
 		this.client = client;
 		this.gameDB = client.getIndexConfig();
 		
-		for (int i = 0; i < 255; i++)
+		for (int i = 0; i < PlayerComposition.KIT_OFFSET; i++)
 		{
 			kitIDtoBodyPartMap[i] = -1;
 		}
@@ -160,9 +160,9 @@ public class JebScapeModelLoader
 		
 		for (int i = 0; i < equipmentIds.length; i++)
 		{
-			if (equipmentIds[i] > 512)
+			if (equipmentIds[i] > PlayerComposition.ITEM_OFFSET)
 			{
-				int itemID = equipmentIds[i] - 512;
+				int itemID = equipmentIds[i] - PlayerComposition.ITEM_OFFSET;
 				byte[] itemData = gameDB.loadData(ITEM_CONFIG_TYPE, itemID);
 				RuneLiteItemDefinition itemDefinition = itemLoader.load(itemID, itemData);
 				int startingCount = numModelIDs;
@@ -203,9 +203,9 @@ public class JebScapeModelLoader
 					}
 				}
 			}
-			else if (equipmentIds[i] >= 256)
+			else if (equipmentIds[i] >= PlayerComposition.KIT_OFFSET)
 			{
-				int kitID = equipmentIds[i] - 256;
+				int kitID = equipmentIds[i] - PlayerComposition.KIT_OFFSET;
 				byte[] kitData = gameDB.loadData(KIT_CONFIG_TYPE, kitID);
 				RuneLiteKitDefinition kitDefinition = kitLoader.load(kitID, kitData);
 				for (int j = 0; j < kitDefinition.models.length; j++)
@@ -291,9 +291,9 @@ public class JebScapeModelLoader
 		
 		for (int i = 0; i < equipmentIDs.length; i++)
 		{
-			if (equipmentIDs[i] > 512)
+			if (equipmentIDs[i] > PlayerComposition.ITEM_OFFSET)
 			{
-				int itemID = equipmentIDs[i] - 512;
+				int itemID = equipmentIDs[i] - PlayerComposition.ITEM_OFFSET;
 				byte[] itemData;
 				try
 				{
@@ -323,9 +323,9 @@ public class JebScapeModelLoader
 						modelIDs[numModelIDs++] = itemDefinition.femaleModel2;
 				}
 			}
-			else if (equipmentIDs[i] >= 256)
+			else if (equipmentIDs[i] >= PlayerComposition.KIT_OFFSET)
 			{
-				int kitID = equipmentIDs[i] - 256;
+				int kitID = equipmentIDs[i] - PlayerComposition.KIT_OFFSET;
 				byte[] kitData;
 				try
 				{
