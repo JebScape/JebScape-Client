@@ -39,11 +39,15 @@ public class JebScapeModelLoader
 		LEGS,
 		FEET
 	}
-	
-	private static final int[] hairKitMap = new int[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 129, 130, 131, 132, 133, 134, 144, 145, 146, 147, 148, 149, 150, 151, -1, -1, -1, -1, -1, -1, -1, -1 };
-	private static final int[] jawKitMap = new int[] { 10, 11, 12, 13, 14, 15, 16, 17, 111, 112, 113, 114, 115, 116, 117, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-	private static final int[] armsKitMap = new int[] { 26, 27, 28, 29, 30, 31, 32, 84, 85, 86, 87, 88, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-	public static int[] kitIDtoBodyPartMap = new int[PlayerComposition.KIT_OFFSET];
+
+	private static int[] hairKitMap = new int[128];
+	private static int[] jawKitMap = new int[32];
+	private static int[] armsKitMap = new int[32];
+	private static int NUM_KIT_IDS = PlayerComposition.ITEM_OFFSET - PlayerComposition.KIT_OFFSET;
+	public static int[] kitIDtoBodyPartMap = new int[NUM_KIT_IDS];
+	private static int numHairKits = 0;
+	private static int numJawKits = 0;
+	private static int numArmsKits = 0;
 	
 	private static final short[] BODY_COLOURS_1_SOURCE = new short[]{
 			6798, 8741, 25238, 4626, 4550
@@ -87,21 +91,77 @@ public class JebScapeModelLoader
 	{
 		this.client = client;
 		this.gameDB = client.getIndexConfig();
+
+		this.numHairKits = 0;
+		this.numJawKits = 0;
+		this.numArmsKits = 0;
 		
-		for (int i = 0; i < PlayerComposition.KIT_OFFSET; i++)
-		{
+		for (int i = 0; i < NUM_KIT_IDS; i++)
 			kitIDtoBodyPartMap[i] = -1;
-		}
-		
+		for (int i = 0; i < 128; i++)
+			hairKitMap[i] = -1;
 		for (int i = 0; i < 32; i++)
+			jawKitMap[i] = -1;
+		for (int i = 0; i < 32; i++)
+			armsKitMap[i] = -1;
+
+		hairKitMap[numHairKits++] = -1;
+		jawKitMap[numJawKits++] = -1;
+		armsKitMap[numArmsKits++] = -1;
+
+		for (int i = 0; i < NUM_KIT_IDS; i++)
 		{
-			if (hairKitMap[i] >= 0)
-				kitIDtoBodyPartMap[hairKitMap[i]] = i;
-			if (jawKitMap[i] >= 0)
-				kitIDtoBodyPartMap[jawKitMap[i]] = i;
-			if (armsKitMap[i] >= 0)
-				kitIDtoBodyPartMap[armsKitMap[i]] = i;
+			byte[] kitData;
+			try
+			{
+				kitData = gameDB.loadData(KIT_CONFIG_TYPE, i);
+			}
+			catch (Exception e)
+			{
+				break;
+			}
+
+			if (kitData != null)
+			{
+				RuneLiteKitDefinition kitDefinition = kitLoader.load(i, kitData);
+
+				if (kitDefinition.bodyPartId == BodyPart.HAIR.ordinal())
+					hairKitMap[numHairKits++] = i;
+				else if (kitDefinition.bodyPartId == BodyPart.JAW.ordinal())
+					jawKitMap[numJawKits++] = i;
+				else if (kitDefinition.bodyPartId == BodyPart.ARMS.ordinal())
+					armsKitMap[numArmsKits++] = i;
+			}
 		}
+
+		for (int i = 1; i < numHairKits; i++)
+			kitIDtoBodyPartMap[hairKitMap[i]] = i;
+		for (int i = 1; i < numJawKits; i++)
+			kitIDtoBodyPartMap[jawKitMap[i]] = i;
+		for (int i = 1; i < numArmsKits; i++)
+			kitIDtoBodyPartMap[armsKitMap[i]] = i;
+	}
+
+	public int packBodyParts(int[] bodyPartIDs)
+	{
+		int packedData = bodyPartIDs[0] + 1;
+		packedData += (bodyPartIDs[1] + 1) * numHairKits;
+		packedData += (bodyPartIDs[2] + 1) * numHairKits * numJawKits;
+		return packedData;
+	}
+
+	private static int[] unpackedBodyParts = new int[3];
+	public int[] unpackBodyParts(int packedBodyParts)
+	{
+		unpackedBodyParts[0] = packedBodyParts % numHairKits;
+		unpackedBodyParts[0]--;
+		packedBodyParts /= numHairKits;
+		unpackedBodyParts[1] = packedBodyParts % numJawKits;
+		unpackedBodyParts[1]--;
+		packedBodyParts /= numJawKits;
+		unpackedBodyParts[2] = packedBodyParts;
+		unpackedBodyParts[2]--;
+		return unpackedBodyParts;
 	}
 	
 	private static ModelData recolourKitModel(ModelData modelData, int bodyPart, int[] kitRecolours)
@@ -164,41 +224,45 @@ public class JebScapeModelLoader
 			{
 				int itemID = equipmentIds[i] - PlayerComposition.ITEM_OFFSET;
 				byte[] itemData = gameDB.loadData(ITEM_CONFIG_TYPE, itemID);
-				RuneLiteItemDefinition itemDefinition = itemLoader.load(itemID, itemData);
-				int startingCount = numModelIDs;
-				if (gender == 0)
+
+				if (itemData != null)
 				{
-					if (itemDefinition.maleModel0 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.maleModel0;
-					if (itemDefinition.maleModel1 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.maleModel1;
-					if (itemDefinition.maleModel2 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.maleModel2;
-				}
-				else if (gender == 1)
-				{
-					if (itemDefinition.femaleModel0 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.femaleModel0;
-					if (itemDefinition.femaleModel1 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.femaleModel1;
-					if (itemDefinition.femaleModel2 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.femaleModel2;
-				}
-				
-				for (int modelIndex = startingCount; modelIndex < numModelIDs; modelIndex++)
-				{
-					modelData[modelIndex] = client.loadModelData(modelIDs[modelIndex]);
-					if (itemDefinition.colorFind != null)
+					RuneLiteItemDefinition itemDefinition = itemLoader.load(itemID, itemData);
+					int startingCount = numModelIDs;
+					if (gender == 0)
 					{
-						int numToRecolor = itemDefinition.colorFind.length;
-						for (int recolorIndex = 0; recolorIndex < numToRecolor; recolorIndex++)
+						if (itemDefinition.maleModel0 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel0;
+						if (itemDefinition.maleModel1 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel1;
+						if (itemDefinition.maleModel2 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel2;
+					}
+					else if (gender == 1)
+					{
+						if (itemDefinition.femaleModel0 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.femaleModel0;
+						if (itemDefinition.femaleModel1 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.femaleModel1;
+						if (itemDefinition.femaleModel2 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.femaleModel2;
+					}
+				
+					for (int modelIndex = startingCount; modelIndex < numModelIDs; modelIndex++)
+					{
+						modelData[modelIndex] = client.loadModelData(modelIDs[modelIndex]);
+						if (itemDefinition.colorFind != null)
 						{
-							short replaceColor = itemDefinition.colorReplace[recolorIndex];
-							if (overrides != null && overrides.length >= i && overrides[i].getColorToReplaceWith() != null && overrides[i].getColorToReplaceWith().length >= 0)
+							int numToRecolor = itemDefinition.colorFind.length;
+							for (int recolorIndex = 0; recolorIndex < numToRecolor; recolorIndex++)
 							{
-								replaceColor = overrides[i].getColorToReplaceWith()[recolorIndex];
+								short replaceColor = itemDefinition.colorReplace[recolorIndex];
+								if (overrides != null && overrides.length >= i && overrides[i].getColorToReplaceWith() != null && overrides[i].getColorToReplaceWith().length >= 0)
+								{
+									replaceColor = overrides[i].getColorToReplaceWith()[recolorIndex];
+								}
+								modelData[modelIndex].recolor(itemDefinition.colorFind[recolorIndex], replaceColor);
 							}
-							modelData[modelIndex].recolor(itemDefinition.colorFind[recolorIndex], replaceColor);
 						}
 					}
 				}
@@ -207,28 +271,32 @@ public class JebScapeModelLoader
 			{
 				int kitID = equipmentIds[i] - PlayerComposition.KIT_OFFSET;
 				byte[] kitData = gameDB.loadData(KIT_CONFIG_TYPE, kitID);
-				RuneLiteKitDefinition kitDefinition = kitLoader.load(kitID, kitData);
-				for (int j = 0; j < kitDefinition.models.length; j++)
+
+				if (kitData != null)
 				{
-					modelIDs[numModelIDs] = kitDefinition.models[j];
-					modelData[numModelIDs] = client.loadModelData(modelIDs[numModelIDs]);
-					
-					if (kitDefinition.recolorToFind != null)
+					RuneLiteKitDefinition kitDefinition = kitLoader.load(kitID, kitData);
+					for (int j = 0; j < kitDefinition.models.length; j++)
 					{
-						int numToRecolor = kitDefinition.recolorToFind.length;
-						for (int recolorIndex = 0; recolorIndex < numToRecolor; recolorIndex++)
+						modelIDs[numModelIDs] = kitDefinition.models[j];
+						modelData[numModelIDs] = client.loadModelData(modelIDs[numModelIDs]);
+
+						if (kitDefinition.recolorToFind != null)
 						{
-							modelData[numModelIDs].recolor(kitDefinition.recolorToFind[recolorIndex], kitDefinition.recolorToReplace[recolorIndex]);
+							int numToRecolor = kitDefinition.recolorToFind.length;
+							for (int recolorIndex = 0; recolorIndex < numToRecolor; recolorIndex++)
+							{
+								modelData[numModelIDs].recolor(kitDefinition.recolorToFind[recolorIndex], kitDefinition.recolorToReplace[recolorIndex]);
+							}
 						}
+
+						final int[] bodyPartMap = { 0, 0, 1, 1, 4, 2, 3 };
+						if (kitDefinition.bodyPartId >= 0)
+						{
+							recolourKitModel(modelData[numModelIDs], bodyPartMap[kitDefinition.bodyPartId], colorIDs);
+						}
+
+						numModelIDs++;
 					}
-					
-					final int[] bodyPartMap = { 0, 0, 1, 1, 4, 2, 3 };
-					if (kitDefinition.bodyPartId >= 0)
-					{
-						recolourKitModel(modelData[numModelIDs], bodyPartMap[kitDefinition.bodyPartId], colorIDs);
-					}
-					
-					numModelIDs++;
 				}
 			}
 		}
@@ -303,24 +371,28 @@ public class JebScapeModelLoader
 				{
 					continue;
 				}
-				RuneLiteItemDefinition itemDefinition = itemLoader.load(itemID, itemData);
-				if (gender == 0)
+
+				if (itemData != null)
 				{
-					if (itemDefinition.maleModel0 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.maleModel0;
-					if (itemDefinition.maleModel1 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.maleModel1;
-					if (itemDefinition.maleModel2 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.maleModel2;
-				}
-				else if (gender == 1)
-				{
-					if (itemDefinition.femaleModel0 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.femaleModel0;
-					if (itemDefinition.femaleModel1 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.femaleModel1;
-					if (itemDefinition.femaleModel2 >= 0)
-						modelIDs[numModelIDs++] = itemDefinition.femaleModel2;
+					RuneLiteItemDefinition itemDefinition = itemLoader.load(itemID, itemData);
+					if (gender == 0)
+					{
+						if (itemDefinition.maleModel0 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel0;
+						if (itemDefinition.maleModel1 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel1;
+						if (itemDefinition.maleModel2 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel2;
+					}
+					else if (gender == 1)
+					{
+						if (itemDefinition.femaleModel0 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.femaleModel0;
+						if (itemDefinition.femaleModel1 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.femaleModel1;
+						if (itemDefinition.femaleModel2 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.femaleModel2;
+					}
 				}
 			}
 			else if (equipmentIDs[i] >= PlayerComposition.KIT_OFFSET)
@@ -335,10 +407,14 @@ public class JebScapeModelLoader
 				{
 					continue;
 				}
-				RuneLiteKitDefinition kitDefinition = kitLoader.load(kitID, kitData);
-				for (int j = 0; j < kitDefinition.models.length; j++)
+
+				if (kitData != null)
 				{
-					modelIDs[numModelIDs++] = kitDefinition.models[j];
+					RuneLiteKitDefinition kitDefinition = kitLoader.load(kitID, kitData);
+					for (int j = 0; j < kitDefinition.models.length; j++)
+					{
+						modelIDs[numModelIDs++] = kitDefinition.models[j];
+					}
 				}
 			}
 		}
@@ -361,10 +437,14 @@ public class JebScapeModelLoader
 			{
 				continue;
 			}
-			RuneLiteKitDefinition kitDefinition = kitLoader.load(kitIDs[i], kitData);
-			for (int j = 0; j < kitDefinition.models.length; j++)
+
+			if (kitData != null)
 			{
-				modelIDs[numModelIDs++] = kitDefinition.models[j];
+				RuneLiteKitDefinition kitDefinition = kitLoader.load(kitIDs[i], kitData);
+				for (int j = 0; j < kitDefinition.models.length; j++)
+				{
+					modelIDs[numModelIDs++] = kitDefinition.models[j];
+				}
 			}
 		}
 		

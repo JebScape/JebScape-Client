@@ -418,9 +418,7 @@ public class MegaserverMod
 											equipmentIDs[5] = (data.subDataBlocks[j + 1][2] >>> 16) & 0xFFFF;
 											
 											equipmentIDs[6] = data.subDataBlocks[j + 1][3] & 0xFFFF;
-											bodyPartIDs[0] = (data.subDataBlocks[j + 1][3] >>> 16) & 0x1F;
-											bodyPartIDs[1] = (data.subDataBlocks[j + 1][3] >>> 21) & 0x1F;
-											bodyPartIDs[2] = (data.subDataBlocks[j + 1][3] >>> 26) & 0x1F;
+											bodyPartIDs = modelLoader.unpackBodyParts((data.subDataBlocks[j + 1][3] >>> 16) & 0x7FFF);
 											int isFemale = (data.subDataBlocks[j + 1][3] >>> 31) & 0x1;
 											
 											ghosts[ghostID].setModel(modelLoader.loadPlayerGhostRenderable(equipmentIDs, bodyPartIDs, isFemale, ghostCapeID[ghostID]));
@@ -709,12 +707,12 @@ public class MegaserverMod
 		equipmentIDs[4] = allEquipmentIDs[KitType.LEGS.ordinal()];
 		equipmentIDs[5] = allEquipmentIDs[KitType.HANDS.ordinal()];
 		equipmentIDs[6] = allEquipmentIDs[KitType.BOOTS.ordinal()];
-		//int hairID = playerComposition.getKitId(KitType.HAIR); TODO: fix female hair
-		bodyPartIDs[0] = playerComposition.getKitId(KitType.HAIR) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.HAIR)] : 31;
-		bodyPartIDs[1] = playerComposition.getKitId(KitType.JAW) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.JAW)] : 31;
-		bodyPartIDs[2] = playerComposition.getKitId(KitType.ARMS) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.ARMS)] : 31;
+
+		bodyPartIDs[0] = playerComposition.getKitId(KitType.HAIR) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.HAIR)] : -1;
+		bodyPartIDs[1] = playerComposition.getKitId(KitType.JAW) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.JAW)] : -1;
+		bodyPartIDs[2] = playerComposition.getKitId(KitType.ARMS) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.ARMS)] : -1;
 		int isFemale = playerComposition.getGender();
-		
+
 		if (showSelfGhost)
 		{
 			if ((prevGameTick & 0x1) == 0x1)
@@ -762,13 +760,11 @@ public class MegaserverMod
 		gameSubData[2] |= (equipmentIDs[5] & 0xFFFF) << 16;	// 32/32 bits
 		
 		// 16 bits equipment ID
-		// 5 bits per kit ID (3x)
+		// 15 bits packed body part IDs
 		// 1 bit isFemale
-		gameSubData[3] = equipmentIDs[6] & 0xFFFF;			// 16/32 bits
-		gameSubData[3] |= (bodyPartIDs[0] & 0x1F) << 16;	// 21/32 bits
-		gameSubData[3] |= (bodyPartIDs[1] & 0x1F) << 21;	// 26/32 bits
-		gameSubData[3] |= (bodyPartIDs[2] & 0x1F) << 26;	// 31/32 bits
-		gameSubData[3] |= (isFemale & 0x1) << 31;			// 32/32 bits
+		gameSubData[3] = equipmentIDs[6] & 0xFFFF;									// 16/32 bits
+		gameSubData[3] = (modelLoader.packBodyParts(bodyPartIDs) & 0x7FFF) << 16;	// 31/32 bits
+		gameSubData[3] |= (isFemale & 0x1) << 31;									// 32/32 bits
 		
 		byte[] extraChatData = new byte[96];
 		
