@@ -97,7 +97,7 @@ public class JebScapeModelLoader
 		this.numArmsKits = 0;
 		
 		for (int i = 0; i < NUM_KIT_IDS; i++)
-			kitIDtoBodyPartMap[i] = -1;
+			kitIDtoBodyPartMap[i] = 0;
 		for (int i = 0; i < 128; i++)
 			hairKitMap[i] = -1;
 		for (int i = 0; i < 32; i++)
@@ -105,8 +105,7 @@ public class JebScapeModelLoader
 		for (int i = 0; i < 32; i++)
 			armsKitMap[i] = -1;
 
-		hairKitMap[numHairKits++] = -1;
-		jawKitMap[numJawKits++] = -1;
+		// maintain a null state for arms but not hair or jaw
 		armsKitMap[numArmsKits++] = -1;
 
 		for (int i = 0; i < NUM_KIT_IDS; i++)
@@ -144,9 +143,9 @@ public class JebScapeModelLoader
 
 	public int packBodyParts(int[] bodyPartIDs)
 	{
-		int packedData = bodyPartIDs[0] + 1;
-		packedData += (bodyPartIDs[1] + 1) * numHairKits;
-		packedData += (bodyPartIDs[2] + 1) * numHairKits * numJawKits;
+		int packedData = bodyPartIDs[0];
+		packedData += bodyPartIDs[1] * numHairKits;
+		packedData += bodyPartIDs[2] * numHairKits * numJawKits;
 		return packedData;
 	}
 
@@ -154,13 +153,10 @@ public class JebScapeModelLoader
 	public int[] unpackBodyParts(int packedBodyParts)
 	{
 		unpackedBodyParts[0] = packedBodyParts % numHairKits;
-		unpackedBodyParts[0]--;
 		packedBodyParts /= numHairKits;
 		unpackedBodyParts[1] = packedBodyParts % numJawKits;
-		unpackedBodyParts[1]--;
 		packedBodyParts /= numJawKits;
-		unpackedBodyParts[2] = packedBodyParts;
-		unpackedBodyParts[2]--;
+		unpackedBodyParts[2] = packedBodyParts % numArmsKits;
 		return unpackedBodyParts;
 	}
 	
@@ -229,16 +225,7 @@ public class JebScapeModelLoader
 				{
 					RuneLiteItemDefinition itemDefinition = itemLoader.load(itemID, itemData);
 					int startingCount = numModelIDs;
-					if (gender == 0)
-					{
-						if (itemDefinition.maleModel0 >= 0)
-							modelIDs[numModelIDs++] = itemDefinition.maleModel0;
-						if (itemDefinition.maleModel1 >= 0)
-							modelIDs[numModelIDs++] = itemDefinition.maleModel1;
-						if (itemDefinition.maleModel2 >= 0)
-							modelIDs[numModelIDs++] = itemDefinition.maleModel2;
-					}
-					else if (gender == 1)
+					if (gender == 1)
 					{
 						if (itemDefinition.femaleModel0 >= 0)
 							modelIDs[numModelIDs++] = itemDefinition.femaleModel0;
@@ -246,6 +233,15 @@ public class JebScapeModelLoader
 							modelIDs[numModelIDs++] = itemDefinition.femaleModel1;
 						if (itemDefinition.femaleModel2 >= 0)
 							modelIDs[numModelIDs++] = itemDefinition.femaleModel2;
+					}
+					else
+					{
+						if (itemDefinition.maleModel0 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel0;
+						if (itemDefinition.maleModel1 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel1;
+						if (itemDefinition.maleModel2 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel2;
 					}
 				
 					for (int modelIndex = startingCount; modelIndex < numModelIDs; modelIndex++)
@@ -375,16 +371,7 @@ public class JebScapeModelLoader
 				if (itemData != null)
 				{
 					RuneLiteItemDefinition itemDefinition = itemLoader.load(itemID, itemData);
-					if (gender == 0)
-					{
-						if (itemDefinition.maleModel0 >= 0)
-							modelIDs[numModelIDs++] = itemDefinition.maleModel0;
-						if (itemDefinition.maleModel1 >= 0)
-							modelIDs[numModelIDs++] = itemDefinition.maleModel1;
-						if (itemDefinition.maleModel2 >= 0)
-							modelIDs[numModelIDs++] = itemDefinition.maleModel2;
-					}
-					else if (gender == 1)
+					if (gender == 1)
 					{
 						if (itemDefinition.femaleModel0 >= 0)
 							modelIDs[numModelIDs++] = itemDefinition.femaleModel0;
@@ -392,6 +379,15 @@ public class JebScapeModelLoader
 							modelIDs[numModelIDs++] = itemDefinition.femaleModel1;
 						if (itemDefinition.femaleModel2 >= 0)
 							modelIDs[numModelIDs++] = itemDefinition.femaleModel2;
+					}
+					else
+					{
+						if (itemDefinition.maleModel0 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel0;
+						if (itemDefinition.maleModel1 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel1;
+						if (itemDefinition.maleModel2 >= 0)
+							modelIDs[numModelIDs++] = itemDefinition.maleModel2;
 					}
 				}
 			}
@@ -419,13 +415,10 @@ public class JebScapeModelLoader
 			}
 		}
 		
-		kitIDs[0] = bodyPartIDs[0] >= 0 ? hairKitMap[bodyPartIDs[0]] : -1;
-		kitIDs[0] = kitIDs[0] >= 0 ? kitIDs[0] : hairKitMap[0];
-		kitIDs[1] = bodyPartIDs[1] >= 0 ? jawKitMap[bodyPartIDs[1]] : -1;
-		kitIDs[1] = kitIDs[1] >= 0 ? kitIDs[1] : jawKitMap[0];
-		kitIDs[2] = bodyPartIDs[2] >= 0 ? armsKitMap[bodyPartIDs[2]] : -1;
-		kitIDs[2] = kitIDs[2] >= 0 ? kitIDs[2] : armsKitMap[0];
-		
+		kitIDs[0] = hairKitMap[bodyPartIDs[0]];
+		kitIDs[1] = jawKitMap[bodyPartIDs[1]];
+		kitIDs[2] = armsKitMap[bodyPartIDs[2]];
+
 		for (int i = 0; i < kitIDs.length; i++)
 		{
 			byte[] kitData;
@@ -463,6 +456,8 @@ public class JebScapeModelLoader
 		ModelData clonedModelData = combinedModelData.cloneColors();
 		if (clonedModelData.getFaceTransparencies() != null)
 			clonedModelData = clonedModelData.cloneTransparencies();
+		if (clonedModelData.getFaceTextures() != null)
+			clonedModelData = clonedModelData.cloneTextures();
 		short[] clonedColors = clonedModelData.getFaceColors();
 		int numToReplace = clonedColors.length - numCapeFaces;
 		for (int i = 0; i < numToReplace; i++)
@@ -476,6 +471,14 @@ public class JebScapeModelLoader
 			{
 				if (clonedModelData.getFaceTransparencies()[i] == 0)
 					clonedModelData.getFaceTransparencies()[i] = GHOST_TRANSPARENCY;
+			}
+		}
+
+		if (clonedModelData.getFaceTextures() != null)
+		{
+			for (int i = 0; i < clonedModelData.getFaceTextures().length; i++)
+			{
+				clonedModelData.getFaceTextures()[i] = -1;
 			}
 		}
 		

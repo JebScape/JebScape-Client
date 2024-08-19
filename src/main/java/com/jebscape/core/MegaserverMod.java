@@ -420,8 +420,9 @@ public class MegaserverMod
 											equipmentIDs[6] = data.subDataBlocks[j + 1][3] & 0xFFFF;
 											bodyPartIDs = modelLoader.unpackBodyParts((data.subDataBlocks[j + 1][3] >>> 16) & 0x7FFF);
 											int isFemale = (data.subDataBlocks[j + 1][3] >>> 31) & 0x1;
-											
-											ghosts[ghostID].setModel(modelLoader.loadPlayerGhostRenderable(equipmentIDs, bodyPartIDs, isFemale, ghostCapeID[ghostID]));
+
+											Model ghostModel = modelLoader.loadPlayerGhostRenderable(equipmentIDs, bodyPartIDs, isFemale, ghostCapeID[ghostID]);
+											ghosts[ghostID].setModel(ghostModel);
 										}
 									}
 									else
@@ -708,10 +709,13 @@ public class MegaserverMod
 		equipmentIDs[5] = allEquipmentIDs[KitType.HANDS.ordinal()];
 		equipmentIDs[6] = allEquipmentIDs[KitType.BOOTS.ordinal()];
 
-		bodyPartIDs[0] = playerComposition.getKitId(KitType.HAIR) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.HAIR)] : -1;
-		bodyPartIDs[1] = playerComposition.getKitId(KitType.JAW) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.JAW)] : -1;
-		bodyPartIDs[2] = playerComposition.getKitId(KitType.ARMS) >= 0 ? modelLoader.kitIDtoBodyPartMap[playerComposition.getKitId(KitType.ARMS)] : -1;
+		int hairID = playerComposition.getKitId(KitType.HAIR);
+		int jawID = playerComposition.getKitId(KitType.JAW);
+		int armsID = playerComposition.getKitId(KitType.ARMS);
 		int isFemale = playerComposition.getGender();
+		bodyPartIDs[0] = hairID >= 0 ? modelLoader.kitIDtoBodyPartMap[hairID] : (isFemale == 1 ? 31 : 0);
+		bodyPartIDs[1] = jawID >= 0 ? modelLoader.kitIDtoBodyPartMap[jawID] : (isFemale == 1 ? 4 : 0);
+		bodyPartIDs[2] = armsID >= 0 ? modelLoader.kitIDtoBodyPartMap[armsID] : 0;
 
 		if (showSelfGhost)
 		{
@@ -763,9 +767,9 @@ public class MegaserverMod
 		// 15 bits packed body part IDs
 		// 1 bit isFemale
 		gameSubData[3] = equipmentIDs[6] & 0xFFFF;									// 16/32 bits
-		gameSubData[3] = (modelLoader.packBodyParts(bodyPartIDs) & 0x7FFF) << 16;	// 31/32 bits
+		gameSubData[3] |= (modelLoader.packBodyParts(bodyPartIDs) & 0x7FFF) << 16;	// 31/32 bits
 		gameSubData[3] |= (isFemale & 0x1) << 31;									// 32/32 bits
-		
+
 		byte[] extraChatData = new byte[96];
 		
 		if (!chatMessageToSend.isEmpty()) // check if we've recently sent a chat message
@@ -866,16 +870,8 @@ public class MegaserverMod
 	
 	private void loadGhostRenderables()
 	{
-		// load ghost model
-		int[] ids = client.getNpcDefinition(GHOST_3516).getModels();
-		ModelData[] modelData = new ModelData[ids.length];
-		for (int i = 0; i < ids.length; i++)
-			modelData[i] = client.loadModelData(ids[i]);
-		ModelData combinedModelData = client.mergeModels(modelData, ids.length);
-		
-		// use the same lighting parameters used for NPCs by Jagex
-		this.defaultGhostModel = combinedModelData.light(64, 850, -30, -50, -30);
-		
+		this.defaultGhostModel = client.loadModel(9925); // null blank model
+
 		selfGhost.setDefaultModel(defaultGhostModel);
 		selfGhost.setPoseAnimations(client.getLocalPlayer());
 		for (int i = 0; i < MAX_GHOSTS; i++)
