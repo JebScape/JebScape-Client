@@ -85,17 +85,12 @@ public class MegaserverMod
 		this.server = server;
 		
 		modelLoader.init(client);
-		
-		selfGhost.init(client, chatMessageManager);
+
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
 			ghosts[i] = new JebScapeActor();
-			ghosts[i].init(client, chatMessageManager);
-			this.prevGhostCapeID[i] = 31;
-			this.ghostCapeID[i] = 31;
-			this.ghostsDirty[i] = true;
 		}
-		
+
 		indicatorOverlay.setJebScapeActors(ghosts);
 		minimapOverlay.setJebScapeActors(ghosts);
 		
@@ -117,10 +112,20 @@ public class MegaserverMod
 			liveHiscoresOverlay.setContainsData(false);
 			resetPost200mXpAccumulators();
 		}
-		
-		this.isActive = true;
-		
+
+		selfGhost.init(client, chatMessageManager);
+
+		for (int i = 0; i < MAX_GHOSTS; i++)
+		{
+			ghosts[i].init(client, chatMessageManager);
+			this.prevGhostCapeID[i] = 31;
+			this.ghostCapeID[i] = 31;
+			this.ghostsDirty[i] = true;
+		}
+
 		loadGhostRenderables();
+
+		this.isActive = true;
 	}
 	
 	public void stop()
