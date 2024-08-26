@@ -114,6 +114,9 @@ public class MegaserverMod
 		}
 
 		selfGhost.init(client, chatMessageManager);
+		this.prevPlayerCapeID = 31;
+		this.playerCapeID = 31;
+		this.selfGhostDirty = true;
 
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
