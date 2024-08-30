@@ -116,7 +116,7 @@ public class JebScapePlugin extends Plugin
 		clientThread.invoke(() ->
 		{
 			useMegaserverMod = true;
-			megaserverMod.init(client, server, actorIndicatorOverlay, minimapOverlay, liveHiscoresOverlay, chatMessageManager);
+			megaserverMod.init(client, server, actorIndicatorOverlay, minimapOverlay, liveHiscoresOverlay, chatMessageManager, configManager);
 			
 			if (configManager.getConfiguration("jebscape", "showSelfGhost", boolean.class))
 				megaserverMod.showSelfGhost();
@@ -450,13 +450,11 @@ public class JebScapePlugin extends Plugin
 			
 			if (!server.isChatLoggedIn())
 			{
-				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "AccountKey");
-				
 				// clear out any obsolete keys players might still have lying around
 				configManager.unsetRSProfileConfiguration("JebScape", "JebScapeAccountKey");
 				configManager.unsetRSProfileConfiguration("JebScape", "AccountKeyGame");
 				configManager.unsetRSProfileConfiguration("JebScape", "AccountKey");
-				keyConfig = configManager.getRSProfileConfiguration("JebScape", "Key");
+				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "Key");
 				if (keyConfig != null)
 				{
 					Long key = Long.parseLong(keyConfig);

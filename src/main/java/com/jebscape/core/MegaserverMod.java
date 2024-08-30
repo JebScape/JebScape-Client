@@ -29,8 +29,9 @@ import net.runelite.api.coords.*;
 import net.runelite.api.events.*;
 import net.runelite.api.kit.*;
 import net.runelite.client.chat.*;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.util.Text;
-import static net.runelite.api.NpcID.*;
+
 import java.nio.charset.*;
 import java.util.Arrays;
 
@@ -54,6 +55,7 @@ public class MegaserverMod
 	private JebScapeConnection server;
 	private JebScapeLiveHiscoresOverlay liveHiscoresOverlay;
 	private ChatMessageManager chatMessageManager;
+	private ConfigManager configManager;
 	private JebScapeModelLoader modelLoader = new JebScapeModelLoader();
 	private int[] coreData = new int[3];
 	private int[] gameSubData = new int[4];
@@ -63,6 +65,12 @@ public class MegaserverMod
 	private boolean selfGhostDirty = true;
 	private boolean[] ghostsDirty = new boolean[MAX_GHOSTS];
 	private boolean showSelfGhost = false;
+	private int defaultMaleHairPartID = 0;
+	private int defaultMaleJawPartID = 0;
+	private int defaultFemaleHairPartID = 12;
+	private int defaultFemaleJawPartID = 4;
+	private int prevDefaultHairPartID = -1;
+	private int prevDefaultJawPartID = -1;
 	private Model defaultGhostModel;
 	private JebScapeActor selfGhost = new JebScapeActor();
 	private JebScapeActor[] ghosts = new JebScapeActor[MAX_GHOSTS];
@@ -79,10 +87,11 @@ public class MegaserverMod
 	private int cmdType = 0;
 	private int cmdArg = 0;
 	
-	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay, JebScapeMinimapOverlay minimapOverlay, JebScapeLiveHiscoresOverlay liveHiscoresOverlay, ChatMessageManager chatMessageManager)
+	public void init(Client client, JebScapeConnection server, JebScapeActorIndicatorOverlay indicatorOverlay, JebScapeMinimapOverlay minimapOverlay, JebScapeLiveHiscoresOverlay liveHiscoresOverlay, ChatMessageManager chatMessageManager, ConfigManager configManager)
 	{
 		this.client = client;
 		this.server = server;
+		this.configManager = configManager;
 		
 		modelLoader.init(client);
 
@@ -117,6 +126,40 @@ public class MegaserverMod
 		this.prevPlayerCapeID = 31;
 		this.playerCapeID = 31;
 		this.selfGhostDirty = true;
+
+		this.prevDefaultHairPartID = -1;
+		this.prevDefaultJawPartID = -1;
+
+		int isFemale = client.getLocalPlayer().getPlayerComposition().getGender();
+		String keyConfig = configManager.getRSProfileConfiguration("JebScape", "HairID");
+		if (keyConfig != null)
+		{
+			this.prevDefaultHairPartID = Integer.parseInt(keyConfig);
+
+			if (isFemale == 1)
+			{
+				this.defaultFemaleHairPartID = this.prevDefaultHairPartID;
+			}
+			else
+			{
+				this.defaultMaleHairPartID = this.prevDefaultHairPartID;
+			}
+		}
+
+		keyConfig = configManager.getRSProfileConfiguration("JebScape", "JawID");
+		if (keyConfig != null)
+		{
+			this.prevDefaultJawPartID = Integer.parseInt(keyConfig);
+
+			if (isFemale == 1)
+			{
+				this.defaultFemaleJawPartID = this.prevDefaultJawPartID;
+			}
+			else
+			{
+				this.defaultMaleJawPartID = this.prevDefaultJawPartID;
+			}
+		}
 
 		for (int i = 0; i < MAX_GHOSTS; i++)
 		{
@@ -224,7 +267,7 @@ public class MegaserverMod
 	{
 		this.startRankToTrack = startRank;
 	}
-	
+
 	// returns number of game data bytes sent
 	public int onGameTick()
 	{
@@ -645,7 +688,7 @@ public class MegaserverMod
 						{
 							// if our player is rank 1 in a skill, let's update their capeID accordingly
 							// set to female max cape if rank 1 Overall is female
-							this.playerCapeID = (skillType == 0 && client.getLocalPlayer().getPlayerComposition().getGender() == 1) ? modelLoader.femaleMaxCapeID : skillType;
+							this.playerCapeID = (skillType == 0 && client.getLocalPlayer().getPlayerComposition().getGender() == 1) ? JebScapeModelLoader.femaleMaxCapeID : skillType;
 						}
 					}
 				}
@@ -721,9 +764,38 @@ public class MegaserverMod
 		int jawID = playerComposition.getKitId(KitType.JAW);
 		int armsID = playerComposition.getKitId(KitType.ARMS);
 		int isFemale = playerComposition.getGender();
-		bodyPartIDs[0] = hairID >= 0 ? modelLoader.kitIDtoBodyPartMap[hairID] : (isFemale == 1 ? 12 : 0);
-		bodyPartIDs[1] = jawID >= 0 ? modelLoader.kitIDtoBodyPartMap[jawID] : (isFemale == 1 ? 4 : 0);
-		bodyPartIDs[2] = armsID >= 0 ? modelLoader.kitIDtoBodyPartMap[armsID] : 0;
+
+		if (hairID >= 0)
+		{
+			if (isFemale == 1)
+				this.defaultFemaleHairPartID = hairID;
+			else
+				this.defaultMaleHairPartID = hairID;
+
+			if (prevDefaultHairPartID != hairID)
+			{
+				configManager.setRSProfileConfiguration("JebScape", "HairID", hairID);
+				this.prevDefaultHairPartID = hairID;
+			}
+		}
+
+		if (jawID >= 0)
+		{
+			if (isFemale == 1)
+				this.defaultFemaleJawPartID = jawID;
+			else
+				this.defaultMaleJawPartID = jawID;
+
+			if (prevDefaultJawPartID != jawID)
+			{
+				configManager.setRSProfileConfiguration("JebScape", "JawID", jawID);
+				this.prevDefaultJawPartID = jawID;
+			}
+		}
+
+		bodyPartIDs[0] = hairID >= 0 ? JebScapeModelLoader.kitIDtoBodyPartMap[hairID] : (isFemale == 1 ? defaultFemaleHairPartID : defaultMaleHairPartID);
+		bodyPartIDs[1] = jawID >= 0 ? JebScapeModelLoader.kitIDtoBodyPartMap[jawID] : (isFemale == 1 ? defaultFemaleJawPartID : defaultMaleJawPartID);
+		bodyPartIDs[2] = armsID >= 0 ? JebScapeModelLoader.kitIDtoBodyPartMap[armsID] : 0;
 
 		if (showSelfGhost)
 		{
