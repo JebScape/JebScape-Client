@@ -93,7 +93,7 @@ public class MegaserverMod
 
 		indicatorOverlay.setJebScapeActors(ghosts);
 		minimapOverlay.setJebScapeActors(ghosts);
-		
+
 		this.liveHiscoresOverlay = liveHiscoresOverlay;
 		liveHiscoresOverlay.setContainsData(false);
 		
@@ -776,7 +776,7 @@ public class MegaserverMod
 		// 1 bit isFemale
 		gameSubData[3] = equipmentIDs[6] & 0xFFFF;												// 16/32 bits
 		gameSubData[3] |= (modelLoader.packBodyParts(bodyPartIDs, isFemale) & 0x7FFF) << 16;	// 31/32 bits
-		gameSubData[3] |= (isFemale & 0x1) << 31;												// 32/32 bits
+		gameSubData[3] |= (isFemale == 1 ? 1 : 0) << 31;										// 32/32 bits
 
 		byte[] extraChatData = new byte[96];
 		
