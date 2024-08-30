@@ -25,29 +25,38 @@
 package com.jebscape.core;
 
 import net.runelite.api.*;
-import net.runelite.api.kit.*;
 
 public class JebScapeModelLoader
 {
 	private enum BodyPart
 	{
-		HAIR,
-		JAW,
-		TORSO,
-		ARMS,
-		HANDS,
-		LEGS,
-		FEET
+		MALE_HAIR,
+		MALE_JAW,
+		MALE_TORSO,
+		MALE_ARMS,
+		MALE_HANDS,
+		MALE_LEGS,
+		MALE_FEET,
+		FEMALE_HAIR,
+		FEMALE_JAW,
+		FEMALE_TORSO,
+		FEMALE_ARMS,
+		FEMALE_HANDS,
+		FEMALE_LEGS,
+		FEMALE_FEET
 	}
 
-	private static int[] hairKitMap = new int[128];
-	private static int[] jawKitMap = new int[32];
-	private static int[] armsKitMap = new int[32];
+	private static int[][] hairKitMap = new int[2][128];
+	private static int[][] jawKitMap = new int[2][32];
+	private static int[][] armsKitMap = new int[2][32];
 	private static int NUM_KIT_IDS = PlayerComposition.ITEM_OFFSET - PlayerComposition.KIT_OFFSET;
 	public static int[] kitIDtoBodyPartMap = new int[NUM_KIT_IDS];
-	private static int numHairKits = 0;
-	private static int numJawKits = 0;
-	private static int numArmsKits = 0;
+	private static int numMaleHairKits = 0;
+	private static int numMaleJawKits = 0;
+	private static int numMaleArmsKits = 0;
+	private static int numFemaleHairKits = 0;
+	private static int numFemaleJawKits = 0;
+	private static int numFemaleArmsKits = 0;
 	
 	private static final short[] BODY_COLOURS_1_SOURCE = new short[]{
 			6798, 8741, 25238, 4626, 4550
@@ -92,21 +101,19 @@ public class JebScapeModelLoader
 		this.client = client;
 		this.gameDB = client.getIndexConfig();
 
-		this.numHairKits = 0;
-		this.numJawKits = 0;
-		this.numArmsKits = 0;
+		this.numMaleHairKits = 0;
+		this.numMaleJawKits = 0;
+		this.numMaleArmsKits = 0;
+		this.numFemaleHairKits = 0;
+		this.numFemaleJawKits = 0;
+		this.numFemaleArmsKits = 0;
 		
 		for (int i = 0; i < NUM_KIT_IDS; i++)
 			kitIDtoBodyPartMap[i] = 0;
-		for (int i = 0; i < 128; i++)
-			hairKitMap[i] = -1;
-		for (int i = 0; i < 32; i++)
-			jawKitMap[i] = -1;
-		for (int i = 0; i < 32; i++)
-			armsKitMap[i] = -1;
 
 		// maintain a null state for arms but not hair or jaw
-		armsKitMap[numArmsKits++] = -1;
+		armsKitMap[0][numMaleArmsKits++] = -1;
+		armsKitMap[1][numFemaleArmsKits++] = -1;
 
 		for (int i = 0; i < NUM_KIT_IDS; i++)
 		{
@@ -124,39 +131,76 @@ public class JebScapeModelLoader
 			{
 				RuneLiteKitDefinition kitDefinition = kitLoader.load(i, kitData);
 
-				if (kitDefinition.bodyPartId == BodyPart.HAIR.ordinal())
-					hairKitMap[numHairKits++] = i;
-				else if (kitDefinition.bodyPartId == BodyPart.JAW.ordinal())
-					jawKitMap[numJawKits++] = i;
-				else if (kitDefinition.bodyPartId == BodyPart.ARMS.ordinal())
-					armsKitMap[numArmsKits++] = i;
+				if (kitDefinition.bodyPartId == BodyPart.MALE_HAIR.ordinal())
+					hairKitMap[0][numMaleHairKits++] = i;
+				else if (kitDefinition.bodyPartId == BodyPart.MALE_JAW.ordinal())
+					jawKitMap[0][numMaleJawKits++] = i;
+				else if (kitDefinition.bodyPartId == BodyPart.MALE_ARMS.ordinal())
+					armsKitMap[0][numMaleArmsKits++] = i;
+				else if (kitDefinition.bodyPartId == BodyPart.FEMALE_HAIR.ordinal())
+					hairKitMap[1][numFemaleHairKits++] = i;
+				else if (kitDefinition.bodyPartId == BodyPart.FEMALE_JAW.ordinal())
+					jawKitMap[1][numFemaleJawKits++] = i;
+				else if (kitDefinition.bodyPartId == BodyPart.FEMALE_ARMS.ordinal())
+					armsKitMap[1][numFemaleArmsKits++] = i;
 			}
 		}
 
-		for (int i = 1; i < numHairKits; i++)
-			kitIDtoBodyPartMap[hairKitMap[i]] = i;
-		for (int i = 1; i < numJawKits; i++)
-			kitIDtoBodyPartMap[jawKitMap[i]] = i;
-		for (int i = 1; i < numArmsKits; i++)
-			kitIDtoBodyPartMap[armsKitMap[i]] = i;
+		// male
+		for (int i = 0; i < numMaleHairKits; i++)
+			kitIDtoBodyPartMap[hairKitMap[0][i]] = i;
+		for (int i = 0; i < numMaleJawKits; i++)
+			kitIDtoBodyPartMap[jawKitMap[0][i]] = i;
+		for (int i = 1; i < numMaleArmsKits; i++)
+			kitIDtoBodyPartMap[armsKitMap[0][i]] = i;
+
+		// female
+		for (int i = 0; i < numFemaleHairKits; i++)
+			kitIDtoBodyPartMap[hairKitMap[1][i]] = i;
+		for (int i = 0; i < numFemaleJawKits; i++)
+			kitIDtoBodyPartMap[jawKitMap[1][i]] = i;
+		for (int i = 1; i < numFemaleArmsKits; i++)
+			kitIDtoBodyPartMap[armsKitMap[1][i]] = i;
 	}
 
-	public int packBodyParts(int[] bodyPartIDs)
+	public int packBodyParts(int[] bodyPartIDs, int gender)
 	{
 		int packedData = bodyPartIDs[0];
-		packedData += bodyPartIDs[1] * numHairKits;
-		packedData += bodyPartIDs[2] * numHairKits * numJawKits;
+
+		if (gender != 1) // if male
+		{
+			packedData += bodyPartIDs[1] * numMaleHairKits;
+			packedData += bodyPartIDs[2] * numMaleHairKits * numMaleJawKits;
+		}
+		else
+		{
+			packedData += bodyPartIDs[1] * numFemaleHairKits;
+			packedData += bodyPartIDs[2] * numFemaleHairKits * numFemaleJawKits;
+		}
+
 		return packedData;
 	}
 
 	private static int[] unpackedBodyParts = new int[3];
-	public int[] unpackBodyParts(int packedBodyParts)
+	public int[] unpackBodyParts(int packedBodyParts, int gender)
 	{
-		unpackedBodyParts[0] = packedBodyParts % numHairKits;
-		packedBodyParts /= numHairKits;
-		unpackedBodyParts[1] = packedBodyParts % numJawKits;
-		packedBodyParts /= numJawKits;
-		unpackedBodyParts[2] = packedBodyParts % numArmsKits;
+		if (gender != 1) // if male
+		{
+			unpackedBodyParts[0] = packedBodyParts % numMaleHairKits;
+			packedBodyParts /= numMaleHairKits;
+			unpackedBodyParts[1] = packedBodyParts % numMaleJawKits;
+			packedBodyParts /= numMaleJawKits;
+			unpackedBodyParts[2] = packedBodyParts % numMaleArmsKits;
+		}
+		else
+		{
+			unpackedBodyParts[0] = packedBodyParts % numFemaleHairKits;
+			packedBodyParts /= numFemaleHairKits;
+			unpackedBodyParts[1] = packedBodyParts % numFemaleJawKits;
+			packedBodyParts /= numFemaleJawKits;
+			unpackedBodyParts[2] = packedBodyParts % numFemaleArmsKits;
+		}
+
 		return unpackedBodyParts;
 	}
 	
@@ -414,10 +458,11 @@ public class JebScapeModelLoader
 				}
 			}
 		}
-		
-		kitIDs[0] = hairKitMap[bodyPartIDs[0]];
-		kitIDs[1] = jawKitMap[bodyPartIDs[1]];
-		kitIDs[2] = armsKitMap[bodyPartIDs[2]];
+
+		int genderIndex = gender == 1 ? 1 : 0;
+		kitIDs[0] = hairKitMap[genderIndex][bodyPartIDs[0]];
+		kitIDs[1] = jawKitMap[genderIndex][bodyPartIDs[1]];
+		kitIDs[2] = armsKitMap[genderIndex][bodyPartIDs[2]];
 
 		for (int i = 0; i < kitIDs.length; i++)
 		{
@@ -443,7 +488,7 @@ public class JebScapeModelLoader
 		
 		modelIDs[numModelIDs++] = 9925; // null filler that guarantees model remains transparent
 		modelIDs[numModelIDs++] = (capeID < 0 || capeID >= skillcapeIDs.length) ? DEFAULT_GHOST_CAPE : skillcapeIDs[capeID]; // we decide the cape used, not the player
-		
+
 		numModelIDs = numModelIDs > NUM_MODEL_DATA ? NUM_MODEL_DATA : numModelIDs; // cap it to ensure it doesn't exceed NUM_MODEL_DATA
 		
 		for (int i = 0; i < numModelIDs; i++)

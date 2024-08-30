@@ -426,8 +426,8 @@ public class MegaserverMod
 											equipmentIDs[5] = (data.subDataBlocks[j + 1][2] >>> 16) & 0xFFFF;
 											
 											equipmentIDs[6] = data.subDataBlocks[j + 1][3] & 0xFFFF;
-											bodyPartIDs = modelLoader.unpackBodyParts((data.subDataBlocks[j + 1][3] >>> 16) & 0x7FFF);
 											int isFemale = (data.subDataBlocks[j + 1][3] >>> 31) & 0x1;
+											bodyPartIDs = modelLoader.unpackBodyParts((data.subDataBlocks[j + 1][3] >>> 16) & 0x7FFF, isFemale);
 
 											Model ghostModel = modelLoader.loadPlayerGhostRenderable(equipmentIDs, bodyPartIDs, isFemale, ghostCapeID[ghostID]);
 											ghosts[ghostID].setModel(ghostModel);
@@ -721,7 +721,7 @@ public class MegaserverMod
 		int jawID = playerComposition.getKitId(KitType.JAW);
 		int armsID = playerComposition.getKitId(KitType.ARMS);
 		int isFemale = playerComposition.getGender();
-		bodyPartIDs[0] = hairID >= 0 ? modelLoader.kitIDtoBodyPartMap[hairID] : (isFemale == 1 ? 31 : 0);
+		bodyPartIDs[0] = hairID >= 0 ? modelLoader.kitIDtoBodyPartMap[hairID] : (isFemale == 1 ? 12 : 0);
 		bodyPartIDs[1] = jawID >= 0 ? modelLoader.kitIDtoBodyPartMap[jawID] : (isFemale == 1 ? 4 : 0);
 		bodyPartIDs[2] = armsID >= 0 ? modelLoader.kitIDtoBodyPartMap[armsID] : 0;
 
@@ -774,9 +774,9 @@ public class MegaserverMod
 		// 16 bits equipment ID
 		// 15 bits packed body part IDs
 		// 1 bit isFemale
-		gameSubData[3] = equipmentIDs[6] & 0xFFFF;									// 16/32 bits
-		gameSubData[3] |= (modelLoader.packBodyParts(bodyPartIDs) & 0x7FFF) << 16;	// 31/32 bits
-		gameSubData[3] |= (isFemale & 0x1) << 31;									// 32/32 bits
+		gameSubData[3] = equipmentIDs[6] & 0xFFFF;												// 16/32 bits
+		gameSubData[3] |= (modelLoader.packBodyParts(bodyPartIDs, isFemale) & 0x7FFF) << 16;	// 31/32 bits
+		gameSubData[3] |= (isFemale & 0x1) << 31;												// 32/32 bits
 
 		byte[] extraChatData = new byte[96];
 		

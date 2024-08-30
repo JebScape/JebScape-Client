@@ -186,7 +186,7 @@ public class JebScapeActor
 	
 	public boolean isActive()
 	{
-		return rlObject.isActive();
+		return rlObject != null && rlObject.isActive();
 	}
 	
 	public void setWorld(int world)
