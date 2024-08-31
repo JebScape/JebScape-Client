@@ -84,7 +84,8 @@ public class JebScapeModelLoader
 	
 	private static final int GHOST_COLOR = 18626;
 	private static final int GHOST_TRANSPARENCY = 60;
-	private static final int DEFAULT_GHOST_CAPE = 22284;
+	private static final int DEFAULT_MALE_GHOST_CAPE = 3189;
+	private static final int DEFAULT_FEMALE_GHOST_CAPE = 3194;
 	
 	private static final int KIT_CONFIG_TYPE = 3;
 	private RuneLiteKitLoader kitLoader = new RuneLiteKitLoader();
@@ -378,12 +379,12 @@ public class JebScapeModelLoader
 			18922,	// CONSTRUCTION
 			29617,	// MAX CAPE BUCKET
 			29624,	// MAX CAPE FEMALE
-			DEFAULT_GHOST_CAPE,
-			DEFAULT_GHOST_CAPE,
-			DEFAULT_GHOST_CAPE,
-			DEFAULT_GHOST_CAPE,
-			DEFAULT_GHOST_CAPE,
-			DEFAULT_GHOST_CAPE
+			DEFAULT_MALE_GHOST_CAPE,
+			DEFAULT_FEMALE_GHOST_CAPE,
+			DEFAULT_MALE_GHOST_CAPE,
+			DEFAULT_FEMALE_GHOST_CAPE,
+			DEFAULT_MALE_GHOST_CAPE,
+			DEFAULT_FEMALE_GHOST_CAPE
 	};
 	
 	private int[] kitIDs = new int[3];
@@ -487,7 +488,9 @@ public class JebScapeModelLoader
 		}
 		
 		modelIDs[numModelIDs++] = 9925; // null filler that guarantees model remains transparent
-		modelIDs[numModelIDs++] = (capeID < 0 || capeID >= skillcapeIDs.length) ? DEFAULT_GHOST_CAPE : skillcapeIDs[capeID]; // we decide the cape used, not the player
+
+		int defaultGhostCape = gender == 1 ? DEFAULT_FEMALE_GHOST_CAPE : DEFAULT_MALE_GHOST_CAPE;
+		modelIDs[numModelIDs++] = (capeID < 0 || capeID >= skillcapeIDs.length) ? defaultGhostCape : skillcapeIDs[capeID]; // we decide the cape used, not the player
 
 		numModelIDs = numModelIDs > NUM_MODEL_DATA ? NUM_MODEL_DATA : numModelIDs; // cap it to ensure it doesn't exceed NUM_MODEL_DATA
 		
@@ -504,7 +507,8 @@ public class JebScapeModelLoader
 		if (clonedModelData.getFaceTextures() != null)
 			clonedModelData = clonedModelData.cloneTextures();
 		short[] clonedColors = clonedModelData.getFaceColors();
-		int numToReplace = clonedColors.length - numCapeFaces;
+
+		int numToReplace = (modelIDs[numModelIDs - 1] == defaultGhostCape) ? clonedColors.length : clonedColors.length - numCapeFaces;
 		for (int i = 0; i < numToReplace; i++)
 		{
 			clonedColors[i] = GHOST_COLOR;
