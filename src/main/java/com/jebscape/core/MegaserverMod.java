@@ -131,7 +131,7 @@ public class MegaserverMod
 		this.prevDefaultJawPartID = -1;
 
 		int isFemale = client.getLocalPlayer().getPlayerComposition().getGender();
-		String keyConfig = configManager.getRSProfileConfiguration("JebScape", "HairID");
+		String keyConfig = configManager.getRSProfileConfiguration("JebScape", "HairPartID");
 		if (keyConfig != null)
 		{
 			this.prevDefaultHairPartID = Integer.parseInt(keyConfig);
@@ -146,7 +146,7 @@ public class MegaserverMod
 			}
 		}
 
-		keyConfig = configManager.getRSProfileConfiguration("JebScape", "JawID");
+		keyConfig = configManager.getRSProfileConfiguration("JebScape", "JawPartID");
 		if (keyConfig != null)
 		{
 			this.prevDefaultJawPartID = Integer.parseInt(keyConfig);
@@ -767,29 +767,33 @@ public class MegaserverMod
 
 		if (hairID >= 0)
 		{
-			if (isFemale == 1)
-				this.defaultFemaleHairPartID = hairID;
-			else
-				this.defaultMaleHairPartID = hairID;
+			int hairPartID = JebScapeModelLoader.kitIDtoBodyPartMap[hairID];
 
-			if (prevDefaultHairPartID != hairID)
+			if (isFemale == 1)
+				this.defaultFemaleHairPartID = hairPartID;
+			else
+				this.defaultMaleHairPartID = hairPartID;
+
+			if (prevDefaultHairPartID != hairPartID)
 			{
-				configManager.setRSProfileConfiguration("JebScape", "HairID", hairID);
-				this.prevDefaultHairPartID = hairID;
+				configManager.setRSProfileConfiguration("JebScape", "HairPartID", hairPartID);
+				this.prevDefaultHairPartID = hairPartID;
 			}
 		}
 
 		if (jawID >= 0)
 		{
-			if (isFemale == 1)
-				this.defaultFemaleJawPartID = jawID;
-			else
-				this.defaultMaleJawPartID = jawID;
+			int jawPartID = JebScapeModelLoader.kitIDtoBodyPartMap[jawID];
 
-			if (prevDefaultJawPartID != jawID)
+			if (isFemale == 1)
+				this.defaultFemaleJawPartID = jawPartID;
+			else
+				this.defaultMaleJawPartID = jawPartID;
+
+			if (prevDefaultJawPartID != jawPartID)
 			{
-				configManager.setRSProfileConfiguration("JebScape", "JawID", jawID);
-				this.prevDefaultJawPartID = jawID;
+				configManager.setRSProfileConfiguration("JebScape", "JawPartID", jawPartID);
+				this.prevDefaultJawPartID = jawPartID;
 			}
 		}
 
