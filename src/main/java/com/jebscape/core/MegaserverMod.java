@@ -61,7 +61,7 @@ public class MegaserverMod
 	private int[] gameSubData = new int[4];
 	private int playerCapeID = 31;
 	private int prevPlayerCapeID = 31;
-	private int prevGameTick = -1;
+	private int prevChatTick = -1;
 	private boolean selfGhostDirty = true;
 	private boolean[] ghostsDirty = new boolean[MAX_GHOSTS];
 	private boolean showSelfGhost = false;
@@ -182,7 +182,7 @@ public class MegaserverMod
 		this.isActive = false;
 		this.playerCapeID = 31;
 		this.prevPlayerCapeID = 31;
-		this.prevGameTick = -1;
+		this.prevChatTick = -1;
 		this.selfGhostDirty = true;
 		this.chatMessageToSend = "";
 		
@@ -275,11 +275,8 @@ public class MegaserverMod
 		liveHiscoresOverlay.onGameTick();
 		
 		// analyze most recent data received from the server
-		JebScapeServerData[][] gameServerData = server.getRecentGameServerData();
 		JebScapeServerData[][] chatServerData = server.getRecentChatServerData();
-		int[] numGamePacketsSent = server.getNumGameServerPacketsSent();
 		int[] numChatPacketsSent = server.getNumChatServerPacketsSent();
-		int currentGameTick = server.getCurrentGameTick();
 		int currentChatTick = server.getCurrentChatTick();
 		final int JAU_PACKING_RATIO = 32;
 		
@@ -289,230 +286,13 @@ public class MegaserverMod
 		for (int i = 0; i < server.TICKS_UNTIL_LOGOUT; i++)
 		{
 			// start the cycle from the earliest tick we might have data on
-			int gameTick = (currentGameTick + i) % server.TICKS_UNTIL_LOGOUT;
-			
-			// only bother if we've received any packets for this tick
-			if (numGamePacketsSent[gameTick] > 0)
-			{
-				boolean isFirstPacket = true;
-				for (int packetID = 0; packetID < server.GAME_SERVER_PACKETS_PER_TICK; packetID++)
-				{
-					JebScapeServerData data = gameServerData[gameTick][packetID];
-					boolean emptyPacket = data.isEmpty();
-					boolean containsMegaserverCmd = false;
-					int playerWorldFlags = 0;
-					int playerWorld = 0;
-					int playerWorldLocationX = 0;
-					int playerWorldLocationY = 0;
-					int playerWorldLocationPlane = 0;
-					int playerPackedOrientation = 0;
-					int playerAnimationID = 0;
-					boolean playerIsInteracting = false;
-					boolean playerIsPoseAnimation = false;
-					boolean isInstanced = false;
-					
-					// let's initialize our player position data
-					if (!emptyPacket)
-					{
-						// unpack the core data
-						// 8 bitflags for game command
-						// 1 bit isPVP
-						// 1 bit isInstanced
-						// 6 bits reserved
-						// 14 bits world
-						// 2 bits plane
-						containsMegaserverCmd = ((data.coreData[0] & 0xFF) & // bitflag, so let's just test the one bit
-												MEGASERVER_MOVEMENT_UPDATE_CMD) != 0;		// 8/32 bits
-						playerWorldFlags = (data.coreData[0] >>> 8) & 0xFF;					// 16/32 bits
-						playerWorld = (data.coreData[0] >>> 16) & 0x3FFF;					// 30/32 bits
-						playerWorldLocationPlane = (data.coreData[0] >>> 30) & 0x3; 		// 32/32 bits
-						
-						// 16 bits world X position
-						// 16 bits world Y position
-						playerWorldLocationX = (data.coreData[1] & 0xFFFF);					// 16/32 bits
-						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);		// 32/32 bits
-						
-						// 10 bits reserved
-						// 6 bits packedOrientation
-						// 14 bits animationID
-						// 1 bit isInteracting
-						// 1 bit isPoseAnimation
-						playerPackedOrientation = (data.coreData[2] >>> 10) & 0x3F;			// 16/32 bits
-						playerAnimationID = (data.coreData[2] >>> 16) & 0x3FFF;				// 30/32 bits
-						playerIsInteracting = ((data.coreData[2] >>> 30) & 0x1) == 0x1;		// 31/32 bits
-						playerIsPoseAnimation = ((data.coreData[2] >>> 31) & 0x1) == 0x1;	// 32/32 bits
-						
-						// experimental implementation for instances
-						isInstanced = ((playerWorldFlags >>> 0x1) & 0x1) == 0x1;
-						if (client.isInInstancedRegion() && isInstanced)
-						{
-							// find the difference between the instance positions
-							WorldPoint currentPlayerWorldPosition = client.getLocalPlayer().getWorldLocation();
-							WorldPoint currentPlayerInstancePosition = WorldPoint.fromLocalInstance(client, LocalPoint.fromWorld(client, currentPlayerWorldPosition));
-							int dx = playerWorldLocationX - currentPlayerInstancePosition.getX();
-							int dy = playerWorldLocationY - currentPlayerInstancePosition.getY();
-							
-							// add this difference to where our player happens to be located in normal world space
-							playerWorldLocationX = currentPlayerWorldPosition.getX() + dx;
-							playerWorldLocationY = currentPlayerWorldPosition.getY() + dy;
-							playerWorldLocationPlane = currentPlayerWorldPosition.getPlane();
-						}
-						
-						// profile stats:
-						/*
-						if (packetID == 0)
-						{
-							int coreTickTime = data.subDataBlocks[6][0];
-							int totalTickTime = data.subDataBlocks[6][1];
-							int postTickTime = data.subDataBlocks[6][2];
-							int playerCount = data.subDataBlocks[6][3];
-							client.addChatMessage(ChatMessageType.TENSECTIMEOUT, "", "Core: " + coreTickTime + " Total: " + totalTickTime + " Post: " + postTickTime + " Players: " + playerCount, null);
-						}
-						//*/
-					}
-					
-					if (containsMegaserverCmd && playerWorld == client.getWorld())
-					{
-						if (isFirstPacket && showSelfGhost && prevGameTick != gameTick)
-						{
-							// handle updating self ghost here
-							WorldPoint ghostPosition = new WorldPoint(playerWorldLocationX, playerWorldLocationY, playerWorldLocationPlane);
-							selfGhost.moveTo(ghostPosition, playerPackedOrientation * JAU_PACKING_RATIO, playerAnimationID, playerIsInteracting, playerIsPoseAnimation, isInstanced, gameTick);
-							this.prevGameTick = gameTick; // this prevents packets with the same server gameTick across two different client gameTicks from repeating the same moveTo destination
-							isFirstPacket = false;
-						}
-						
-						// all ghost positional data within a packet is relative to 15 tiles SW of where the server believes the player to be
-						playerWorldLocationX -= 15;
-						playerWorldLocationY -= 15;
-						
-						// there are 4 ghosts per sub data block
-						for (int j = 0; j < JebScapeServerData.SUB_DATA_BLOCK_SIZE; j++)
-						{
-							int ghostID = packetID * JebScapeServerData.SUB_DATA_BLOCK_SIZE + j;
-							
-							// all data outside the total range must necessarily have despawned ghosts
-							if (packetID >= numGamePacketsSent[gameTick])
-							{
-								ghosts[ghostID].despawn();
-								this.prevGhostModelData[ghostID][0] = 0;
-								this.prevGhostModelData[ghostID][1] = 0;
-								this.prevGhostModelData[ghostID][2] = 0;
-								this.prevGhostModelData[ghostID][3] = 0;
-								this.prevGhostCapeID[ghostID] = 31;
-								this.ghostCapeID[ghostID] = 31;
-							}
-							else if (!emptyPacket) // within range and not empty, so let's process
-							{
-								// each piece of ghost data is 4 bytes
-								int ghostData = data.subDataBlocks[0][j];
-								
-								// if the values are 0x1F (31) for each dx and dy, then the ghost has despawned
-								// 10 bits combined for dx and dy; check first if despawned
-								boolean despawned = (ghostData & 0x3FF) == 0x3FF; // 10 bits (if dx and dy are both all 1s)
-								
-								if (despawned)
-								{
-									ghosts[ghostID].despawn();
-									this.prevGhostModelData[ghostID][0] = 0;
-									this.prevGhostModelData[ghostID][1] = 0;
-									this.prevGhostModelData[ghostID][2] = 0;
-									this.prevGhostModelData[ghostID][3] = 0;
-									this.prevGhostCapeID[ghostID] = 31;
-									this.ghostCapeID[ghostID] = 31;
-								}
-								else
-								{
-									// not despawned, so let's extract the full data
-									// 5 bits dx
-									// 5 bits dy
-									// 6 bits packedOrientation
-									// 14 bits animationID
-									// 1 bit isInteracting
-									// 1 bit isPoseAnimation
-									int dx = ghostData & 0x1F;										// 5/32 bits
-									int dy = (ghostData >>> 5) & 0x1F;								// 10/32 bits
-									int packedOrientation = (ghostData >>> 10) & 0x3F;				// 16/32 bits
-									int animationID = (ghostData >>> 16) & 0x3FFF;					// 30/32 bits
-									boolean isInteracting = ((ghostData >>> 30) & 0x1) == 0x1;		// 31/32 bits
-									boolean isPoseAnimation = ((ghostData >>> 31) & 0x1) == 0x1;	// 32/32 bits
-									
-									WorldPoint ghostPosition = new WorldPoint(playerWorldLocationX + dx, playerWorldLocationY + dy, playerWorldLocationPlane);
-									ghosts[ghostID].moveTo(ghostPosition, packedOrientation * JAU_PACKING_RATIO, animationID, isInteracting, isPoseAnimation, isInstanced, gameTick);
-									
-									if ((gameTick & 0x1) == 0x1)
-									{
-										boolean modelDataChanged = data.subDataBlocks[j + 1][0] != prevGhostModelData[ghostID][0];
-										modelDataChanged = modelDataChanged || (data.subDataBlocks[j + 1][1] != prevGhostModelData[ghostID][1]);
-										modelDataChanged = modelDataChanged || (data.subDataBlocks[j + 1][2] != prevGhostModelData[ghostID][2]);
-										modelDataChanged = modelDataChanged || (data.subDataBlocks[j + 1][3] != prevGhostModelData[ghostID][3]);
-										modelDataChanged = modelDataChanged || ghostCapeID[ghostID] != prevGhostCapeID[ghostID];
-										modelDataChanged = modelDataChanged || ghostsDirty[ghostID];
-										
-										this.prevGhostModelData[ghostID][0] = data.subDataBlocks[j + 1][0];
-										this.prevGhostModelData[ghostID][1] = data.subDataBlocks[j + 1][1];
-										this.prevGhostModelData[ghostID][2] = data.subDataBlocks[j + 1][2];
-										this.prevGhostModelData[ghostID][3] = data.subDataBlocks[j + 1][3];
-										this.prevGhostCapeID[ghostID] = ghostCapeID[ghostID];
-										ghostsDirty[ghostID] = false;
-										
-										if (modelDataChanged)
-										{
-											// extract ghost model data
-											equipmentIDs[0] = data.subDataBlocks[j + 1][0] & 0xFFFF;
-											equipmentIDs[1] = (data.subDataBlocks[j + 1][0] >>> 16) & 0xFFFF;
-											
-											equipmentIDs[2] = data.subDataBlocks[j + 1][1] & 0xFFFF;
-											equipmentIDs[3] = (data.subDataBlocks[j + 1][1] >>> 16) & 0xFFFF;
-											
-											equipmentIDs[4] = data.subDataBlocks[j + 1][2] & 0xFFFF;
-											equipmentIDs[5] = (data.subDataBlocks[j + 1][2] >>> 16) & 0xFFFF;
-											
-											equipmentIDs[6] = data.subDataBlocks[j + 1][3] & 0xFFFF;
-											int isFemale = (data.subDataBlocks[j + 1][3] >>> 31) & 0x1;
-											bodyPartIDs = modelLoader.unpackBodyParts((data.subDataBlocks[j + 1][3] >>> 16) & 0x7FFF, isFemale);
-
-											Model ghostModel = modelLoader.loadPlayerGhostRenderable(equipmentIDs, bodyPartIDs, isFemale, ghostCapeID[ghostID]);
-											ghosts[ghostID].setModel(ghostModel);
-										}
-									}
-									else
-									{
-										// extract ghost world and name
-										int ghostWorld = data.subDataBlocks[j + 1][0] & 0x3FFF;
-										ghosts[ghostID].setWorld(ghostWorld);
-										this.ghostCapeID[ghostID] = (data.subDataBlocks[j + 1][0] >>> 14) & 0x1F;
-										
-										nameBytes[0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
-										nameBytes[1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
-										nameBytes[2] = (byte)((data.subDataBlocks[j + 1][1] >>> 16) & 0xFF);
-										nameBytes[3] = (byte)((data.subDataBlocks[j + 1][1] >>> 24) & 0xFF);
-										
-										nameBytes[4] = (byte)(data.subDataBlocks[j + 1][2] & 0xFF);
-										nameBytes[5] = (byte)((data.subDataBlocks[j + 1][2] >>> 8) & 0xFF);
-										nameBytes[6] = (byte)((data.subDataBlocks[j + 1][2] >>> 16) & 0xFF);
-										nameBytes[7] = (byte)((data.subDataBlocks[j + 1][2] >>> 24) & 0xFF);
-										
-										nameBytes[8] = (byte)(data.subDataBlocks[j + 1][3] & 0xFF);
-										nameBytes[9] = (byte)((data.subDataBlocks[j + 1][3] >>> 8) & 0xFF);
-										nameBytes[10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
-										nameBytes[11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
-										
-										ghosts[ghostID].setName(new String(nameBytes, StandardCharsets.UTF_8).trim());
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			
-			// now let's do all this again for chat messages
 			int chatTick = (currentChatTick + i) % server.TICKS_UNTIL_LOGOUT;
-			
+
 			// only bother if we've received any packets for this tick
 			if (numChatPacketsSent[chatTick] > 0)
 			{
+				boolean isFirstPacket = true;
+
 				for (int packetID = 0; packetID < server.CHAT_SERVER_PACKETS_PER_TICK; packetID++)
 				{
 					JebScapeServerData data = chatServerData[chatTick][packetID];
@@ -524,75 +304,239 @@ public class MegaserverMod
 					int playerWorldLocationX = 0;
 					int playerWorldLocationY = 0;
 					int playerWorldLocationPlane = 0;
-					int playerAnimationState = 0;
+					int playerPackedOrientation = 0;
+					int playerAnimationID = 0;
+					boolean playerIsInteracting = false;
+					boolean playerIsPoseAnimation = false;
 					boolean isInstanced = false;
-					
+
 					// let's initialize our player position data
 					if (!emptyPacket)
 					{
 						// unpack the core data
-						// 8 bitflags for chat command
+						// 8 bitflags for game command
 						// 1 bit isPVP
 						// 1 bit isInstanced
 						// 6 bits reserved
 						// 14 bits world
 						// 2 bits plane
-						containsMegaserverCmd = ((data.coreData[0] & 0xFF) & // bitflag, so let's just test the one bit
-								MEGASERVER_MOVEMENT_UPDATE_CMD) != 0;	// 8/32 bits
-						containsLiveHiscoresCmd = ((data.coreData[0] & 0xFF) & // bitflag, so let's just test the one bit
-								LIVE_HISCORES_STATS_UPDATE_CMD) != 0;	// 8/32 bits
-						playerWorldFlags = (data.coreData[0] >>> 8) & 0xFF;				// 16/32 bits
-						playerWorld = (data.coreData[0] >>> 16) & 0x3FFF;				// 30/32 bits
-						playerWorldLocationPlane = (data.coreData[0] >>> 30) & 0x3; 	// 32/32 bits
-						
+						containsMegaserverCmd = ((data.blocks[0][1] & 0xFF) & // bitflag, so let's just test the one bit
+								MEGASERVER_MOVEMENT_UPDATE_CMD) != 0;					// 8/32 bits
+						containsLiveHiscoresCmd = ((data.blocks[0][1] & 0xFF) & // bitflag, so let's just test the one bit
+								LIVE_HISCORES_STATS_UPDATE_CMD) != 0;					// 8/32 bits
+						playerWorldFlags = (data.blocks[0][1] >>> 8) & 0xFF;			// 16/32 bits
+						playerWorld = (data.blocks[0][1] >>> 16) & 0x3FFF;				// 30/32 bits
+						playerWorldLocationPlane = (data.blocks[0][1] >>> 30) & 0x3; 	// 32/32 bits
+
 						// 16 bits world X position
 						// 16 bits world Y position
-						playerWorldLocationX = (data.coreData[1] & 0xFFFF);				// 16/32 bits
-						playerWorldLocationY = ((data.coreData[1] >>> 16) & 0xFFFF);	// 32/32
-						
-						playerAnimationState = data.coreData[2];
-						
-						// not using the third int; reserved for future use
-						
+						playerWorldLocationX = (data.blocks[0][2] & 0xFFFF);			// 16/32 bits
+						playerWorldLocationY = ((data.blocks[0][2] >>> 16) & 0xFFFF);	// 32/32 bits
+
+						// 10 bits reserved
+						// 6 bits packedOrientation
+						// 14 bits animationID
+						// 1 bit isInteracting
+						// 1 bit isPoseAnimation
+						playerPackedOrientation = (data.blocks[0][3] >>> 10) & 0x3F;		// 16/32 bits
+						playerAnimationID = (data.blocks[0][3] >>> 16) & 0x3FFF;			// 30/32 bits
+						playerIsInteracting = ((data.blocks[0][3] >>> 30) & 0x1) == 0x1;	// 31/32 bits
+						playerIsPoseAnimation = ((data.blocks[0][3] >>> 31) & 0x1) == 0x1;	// 32/32 bits
+
 						// experimental implementation for instances
 						isInstanced = ((playerWorldFlags >>> 0x1) & 0x1) == 0x1;
-						
+						if (client.isInInstancedRegion() && isInstanced)
+						{
+							// find the difference between the instance positions
+							WorldPoint currentPlayerWorldPosition = client.getLocalPlayer().getWorldLocation();
+							WorldPoint currentPlayerInstancePosition = WorldPoint.fromLocalInstance(client, LocalPoint.fromWorld(client, currentPlayerWorldPosition));
+							int dx = playerWorldLocationX - currentPlayerInstancePosition.getX();
+							int dy = playerWorldLocationY - currentPlayerInstancePosition.getY();
+
+							// add this difference to where our player happens to be located in normal world space
+							playerWorldLocationX = currentPlayerWorldPosition.getX() + dx;
+							playerWorldLocationY = currentPlayerWorldPosition.getY() + dy;
+							playerWorldLocationPlane = currentPlayerWorldPosition.getPlane();
+						}
+
 						// profile stats:
 						/*
 						if (packetID == 0)
 						{
-							int coreTickTime = data.subDataBlocks[6][0];
-							int totalTickTime = data.subDataBlocks[6][1];
-							int postTickTime = data.subDataBlocks[6][2];
-							int playerCount = data.subDataBlocks[6][3];
+							int coreTickTime = data.blocks[26][0];
+							int totalTickTime = data.blocks[26][1];
+							int postTickTime = data.blocks[26][2];
+							int playerCount = data.blocks[26][3];
 							client.addChatMessage(ChatMessageType.TENSECTIMEOUT, "", "Core: " + coreTickTime + " Total: " + totalTickTime + " Post: " + postTickTime + " Players: " + playerCount, null);
 						}
 						//*/
+					}
+
+					if (containsMegaserverCmd && playerWorld == client.getWorld())
+					{
+						if (isFirstPacket && showSelfGhost && prevChatTick != chatTick)
+						{
+							// handle updating self ghost here
+							WorldPoint ghostPosition = new WorldPoint(playerWorldLocationX, playerWorldLocationY, playerWorldLocationPlane);
+							selfGhost.moveTo(ghostPosition, playerPackedOrientation * JAU_PACKING_RATIO, playerAnimationID, playerIsInteracting, playerIsPoseAnimation, isInstanced, chatTick);
+							this.prevChatTick = chatTick; // this prevents packets with the same server gameTick across two different client gameTicks from repeating the same moveTo destination
+							isFirstPacket = false;
+						}
+
+						// all ghost positional data within a packet is relative to 15 tiles SW of where the server believes the player to be
+						playerWorldLocationX -= 15;
+						playerWorldLocationY -= 15;
+
+						// 16 ghosts per packet, split across 4 sections (5 blocks each)
+						for (int sectionID = 0; sectionID < 4; sectionID++)
+						{
+							int ghostDataBlockIdx = sectionID * 5 + 1; // 1, 6, 11, 16
+
+							// there are 4 ghosts per data block
+							for (int j = 0; j < JebScapeServerData.DATA_BLOCK_SIZE; j++)
+							{
+								int ghostID = (packetID * 16) * (sectionID * JebScapeServerData.DATA_BLOCK_SIZE) + j;
+
+								// all data outside the total range must necessarily have despawned ghosts
+								if (packetID >= numChatPacketsSent[chatTick])
+								{
+									ghosts[ghostID].despawn();
+									this.prevGhostModelData[ghostID][0] = 0;
+									this.prevGhostModelData[ghostID][1] = 0;
+									this.prevGhostModelData[ghostID][2] = 0;
+									this.prevGhostModelData[ghostID][3] = 0;
+									this.prevGhostCapeID[ghostID] = 31;
+									this.ghostCapeID[ghostID] = 31;
+								}
+								else if (!emptyPacket) // within range and not empty, so let's process
+								{
+									// each piece of ghost data is 4 bytes
+									int ghostData = data.blocks[ghostDataBlockIdx][j];
+
+									// if the values are 0x1F (31) for each dx and dy, then the ghost has despawned
+									// 10 bits combined for dx and dy; check first if despawned
+									boolean despawned = (ghostData & 0x3FF) == 0x3FF; // 10 bits (if dx and dy are both all 1s)
+
+									if (despawned)
+									{
+										ghosts[ghostID].despawn();
+										this.prevGhostModelData[ghostID][0] = 0;
+										this.prevGhostModelData[ghostID][1] = 0;
+										this.prevGhostModelData[ghostID][2] = 0;
+										this.prevGhostModelData[ghostID][3] = 0;
+										this.prevGhostCapeID[ghostID] = 31;
+										this.ghostCapeID[ghostID] = 31;
+									}
+									else
+									{
+										// not despawned, so let's extract the full data
+										// 5 bits dx
+										// 5 bits dy
+										// 6 bits packedOrientation
+										// 14 bits animationID
+										// 1 bit isInteracting
+										// 1 bit isPoseAnimation
+										int dx = ghostData & 0x1F;										// 5/32 bits
+										int dy = (ghostData >>> 5) & 0x1F;								// 10/32 bits
+										int packedOrientation = (ghostData >>> 10) & 0x3F;				// 16/32 bits
+										int animationID = (ghostData >>> 16) & 0x3FFF;					// 30/32 bits
+										boolean isInteracting = ((ghostData >>> 30) & 0x1) == 0x1;		// 31/32 bits
+										boolean isPoseAnimation = ((ghostData >>> 31) & 0x1) == 0x1;	// 32/32 bits
+
+										WorldPoint ghostPosition = new WorldPoint(playerWorldLocationX + dx, playerWorldLocationY + dy, playerWorldLocationPlane);
+										ghosts[ghostID].moveTo(ghostPosition, packedOrientation * JAU_PACKING_RATIO, animationID, isInteracting, isPoseAnimation, isInstanced, chatTick);
+										
+										int blockIdx = ghostDataBlockIdx + j + 1;
+
+										if ((chatTick & 0x1) == 0x1)
+										{
+											boolean modelDataChanged = data.blocks[blockIdx][0] != prevGhostModelData[ghostID][0];
+											modelDataChanged = modelDataChanged || (data.blocks[blockIdx][1] != prevGhostModelData[ghostID][1]);
+											modelDataChanged = modelDataChanged || (data.blocks[blockIdx][2] != prevGhostModelData[ghostID][2]);
+											modelDataChanged = modelDataChanged || (data.blocks[blockIdx][3] != prevGhostModelData[ghostID][3]);
+											modelDataChanged = modelDataChanged || ghostCapeID[ghostID] != prevGhostCapeID[ghostID];
+											modelDataChanged = modelDataChanged || ghostsDirty[ghostID];
+
+											this.prevGhostModelData[ghostID][0] = data.blocks[blockIdx][0];
+											this.prevGhostModelData[ghostID][1] = data.blocks[blockIdx][1];
+											this.prevGhostModelData[ghostID][2] = data.blocks[blockIdx][2];
+											this.prevGhostModelData[ghostID][3] = data.blocks[blockIdx][3];
+											this.prevGhostCapeID[ghostID] = ghostCapeID[ghostID];
+											ghostsDirty[ghostID] = false;
+
+											if (modelDataChanged)
+											{
+												// extract ghost model data
+												equipmentIDs[0] = data.blocks[blockIdx][0] & 0xFFFF;
+												equipmentIDs[1] = (data.blocks[blockIdx][0] >>> 16) & 0xFFFF;
+
+												equipmentIDs[2] = data.blocks[blockIdx][1] & 0xFFFF;
+												equipmentIDs[3] = (data.blocks[blockIdx][1] >>> 16) & 0xFFFF;
+
+												equipmentIDs[4] = data.blocks[blockIdx][2] & 0xFFFF;
+												equipmentIDs[5] = (data.blocks[blockIdx][2] >>> 16) & 0xFFFF;
+
+												equipmentIDs[6] = data.blocks[blockIdx][3] & 0xFFFF;
+												int isFemale = (data.blocks[blockIdx][3] >>> 31) & 0x1;
+												bodyPartIDs = modelLoader.unpackBodyParts((data.blocks[blockIdx][3] >>> 16) & 0x7FFF, isFemale);
+
+												Model ghostModel = modelLoader.loadPlayerGhostRenderable(equipmentIDs, bodyPartIDs, isFemale, ghostCapeID[ghostID]);
+												ghosts[ghostID].setModel(ghostModel);
+											}
+										}
+										else
+										{
+											// extract ghost world and name
+											int ghostWorld = data.blocks[blockIdx][0] & 0x3FFF;
+											ghosts[ghostID].setWorld(ghostWorld);
+											this.ghostCapeID[ghostID] = (data.blocks[blockIdx][0] >>> 14) & 0x1F;
+
+											nameBytes[0] = (byte)(data.blocks[blockIdx][1] & 0xFF);
+											nameBytes[1] = (byte)((data.blocks[blockIdx][1] >>> 8) & 0xFF);
+											nameBytes[2] = (byte)((data.blocks[blockIdx][1] >>> 16) & 0xFF);
+											nameBytes[3] = (byte)((data.blocks[blockIdx][1] >>> 24) & 0xFF);
+
+											nameBytes[4] = (byte)(data.blocks[blockIdx][2] & 0xFF);
+											nameBytes[5] = (byte)((data.blocks[blockIdx][2] >>> 8) & 0xFF);
+											nameBytes[6] = (byte)((data.blocks[blockIdx][2] >>> 16) & 0xFF);
+											nameBytes[7] = (byte)((data.blocks[blockIdx][2] >>> 24) & 0xFF);
+
+											nameBytes[8] = (byte)(data.blocks[blockIdx][3] & 0xFF);
+											nameBytes[9] = (byte)((data.blocks[blockIdx][3] >>> 8) & 0xFF);
+											nameBytes[10] = (byte)((data.blocks[blockIdx][3] >>> 16) & 0xFF);
+											nameBytes[11] = (byte)((data.blocks[blockIdx][3] >>> 24) & 0xFF);
+
+											ghosts[ghostID].setName(new String(nameBytes, StandardCharsets.UTF_8).trim());
+										}
+									}
+								}
+							}
+						}
 					}
 					
 					// contains chat messages
 					if (containsMegaserverCmd && playerWorld == client.getWorld())
 					{
 						// extract chat message
-						int ghostWorld = data.subDataBlocks[0][0];
+						int ghostWorld = data.blocks[28][0];
 						
 						if (ghostWorld != 0)
 						{
 							// a chat message exists, so let's extract the rest
-							nameBytes[0] = (byte)(data.subDataBlocks[0][1] & 0xFF);
-							nameBytes[1] = (byte)((data.subDataBlocks[0][1] >>> 8) & 0xFF);
-							nameBytes[2] = (byte)((data.subDataBlocks[0][1] >>> 16) & 0xFF);
-							nameBytes[3] = (byte)((data.subDataBlocks[0][1] >>> 24) & 0xFF);
+							nameBytes[0] = (byte)(data.blocks[28][1] & 0xFF);
+							nameBytes[1] = (byte)((data.blocks[28][1] >>> 8) & 0xFF);
+							nameBytes[2] = (byte)((data.blocks[28][1] >>> 16) & 0xFF);
+							nameBytes[3] = (byte)((data.blocks[28][1] >>> 24) & 0xFF);
 							
-							nameBytes[4] = (byte)(data.subDataBlocks[0][2] & 0xFF);
-							nameBytes[5] = (byte)((data.subDataBlocks[0][2] >>> 8) & 0xFF);
-							nameBytes[6] = (byte)((data.subDataBlocks[0][2] >>> 16) & 0xFF);
-							nameBytes[7] = (byte)((data.subDataBlocks[0][2] >>> 24) & 0xFF);
+							nameBytes[4] = (byte)(data.blocks[28][2] & 0xFF);
+							nameBytes[5] = (byte)((data.blocks[28][2] >>> 8) & 0xFF);
+							nameBytes[6] = (byte)((data.blocks[28][2] >>> 16) & 0xFF);
+							nameBytes[7] = (byte)((data.blocks[28][2] >>> 24) & 0xFF);
 							
-							nameBytes[8] = (byte)(data.subDataBlocks[0][3] & 0xFF);
-							nameBytes[9] = (byte)((data.subDataBlocks[0][3] >>> 8) & 0xFF);
-							nameBytes[10] = (byte)((data.subDataBlocks[0][3] >>> 16) & 0xFF);
-							nameBytes[11] = (byte)((data.subDataBlocks[0][3] >>> 24) & 0xFF);
+							nameBytes[8] = (byte)(data.blocks[28][3] & 0xFF);
+							nameBytes[9] = (byte)((data.blocks[28][3] >>> 8) & 0xFF);
+							nameBytes[10] = (byte)((data.blocks[28][3] >>> 16) & 0xFF);
+							nameBytes[11] = (byte)((data.blocks[28][3] >>> 24) & 0xFF);
 							
 							String senderName = new String(nameBytes, StandardCharsets.UTF_8).trim();
 							// now let's see if we can find the corresponding ghost for this chat message
@@ -604,14 +548,14 @@ public class MegaserverMod
 								{
 									// we found our ghost, let's proceed
 									int index = 0;
-									for (int j = 1; j < 6; j++)
+									for (int j = 29; j < 6; j++)
 									{
 										for (int k = 0; k < 4; k++)
 										{
-											chatBytes[index++] = (byte)(data.subDataBlocks[j][k] & 0xFF);
-											chatBytes[index++] = (byte)((data.subDataBlocks[j][k] >>> 8) & 0xFF);
-											chatBytes[index++] = (byte)((data.subDataBlocks[j][k] >>> 16) & 0xFF);
-											chatBytes[index++] = (byte)((data.subDataBlocks[j][k] >>> 24) & 0xFF);
+											chatBytes[index++] = (byte)(data.blocks[j][k] & 0xFF);
+											chatBytes[index++] = (byte)((data.blocks[j][k] >>> 8) & 0xFF);
+											chatBytes[index++] = (byte)((data.blocks[j][k] >>> 16) & 0xFF);
+											chatBytes[index++] = (byte)((data.blocks[j][k] >>> 24) & 0xFF);
 										}
 									}
 									
@@ -631,53 +575,54 @@ public class MegaserverMod
 						// 3 bits monitoredPlayerRankOffset (ranks 0-4; all 1 bits mean none is monitored)
 						// 17 bits startingRank (the ranks we pass down are offset by this)
 						// 12 bits liveHiscoresLevels[0]
-						int monitoredPlayerRankOffset = data.subDataBlocks[0][0] & 0x7;			// 3/32 bits
-						int startRank = (data.subDataBlocks[0][0] >>> 3) & 0x1FFFF;				// 20/32 bits
-						liveHiscoresLevels[0] = (data.subDataBlocks[0][0] >>> 20) & 0xFFF;		// 32/32 bits
+						int monitoredPlayerRankOffset = data.blocks[28][0] & 0x7;		// 3/32 bits
+						int startRank = (data.blocks[28][0] >>> 3) & 0x1FFFF;			// 20/32 bits
+						liveHiscoresLevels[0] = (data.blocks[28][0] >>> 20) & 0xFFF;	// 32/32 bits
 						
 						// 12 bits liveHiscoresLevels[1]
 						// 12 bits liveHiscoresLevels[2]
 						// 8 bits reserved
-						liveHiscoresLevels[1] = data.subDataBlocks[0][1] & 0xFFF;				// 12/32 bits
-						liveHiscoresLevels[2] = (data.subDataBlocks[0][1] >>> 12) & 0xFFF;		// 24/32 bits
+						liveHiscoresLevels[1] = data.blocks[28][1] & 0xFFF;				// 12/32 bits
+						liveHiscoresLevels[2] = (data.blocks[28][1] >>> 12) & 0xFFF;	// 24/32 bits
 						
 						// 12 bits liveHiscoresLevels[3]
 						// 12 bits liveHiscoresLevels[4]
 						// 8 bits reserved
-						liveHiscoresLevels[3] = data.subDataBlocks[0][2] & 0xFFF;				// 12/32 bits
-						liveHiscoresLevels[4] = (data.subDataBlocks[0][2] >>> 12) & 0xFFF;		// 24/32 bits
+						liveHiscoresLevels[3] = data.blocks[28][2] & 0xFFF;				// 12/32 bits
+						liveHiscoresLevels[4] = (data.blocks[28][2] >>> 12) & 0xFFF;	// 24/32 bits
 						
 						// 5 bits skill type
 						// 2 bits reserved
 						// 25 bits for Overall upperXPs; 5 bits each
 						// 2 bits reserved
-						int skillType = data.subDataBlocks[0][3] & 0x5F;								// 5/32 bits
-						//int reserved = (data.subDataBlocks[0][3] >>> 5) & 0x3;						// 7/32 bits
-						liveHiscoresXPs[0] = (long)((data.subDataBlocks[0][3] >>> 7) & 0x1F) << 31;		// 12/32 bits
-						liveHiscoresXPs[1] = (long)((data.subDataBlocks[0][3] >>> 12) & 0x1F) << 31;	// 17/32 bits
-						liveHiscoresXPs[2] = (long)((data.subDataBlocks[0][3] >>> 17) & 0x1F) << 31;	// 22/32 bits
-						liveHiscoresXPs[3] = (long)((data.subDataBlocks[0][3] >>> 22) & 0x1F) << 31;	// 27/32 bits
-						liveHiscoresXPs[4] = (long)((data.subDataBlocks[0][3] >>> 27) & 0x1F) << 31;	// 32/32 bits
+						int skillType = data.blocks[28][3] & 0x5F;								// 5/32 bits
+						//int reserved = (data.subDataBlocks[0][3] >>> 5) & 0x3;				// 7/32 bits
+						liveHiscoresXPs[0] = (long)((data.blocks[28][3] >>> 7) & 0x1F) << 31;	// 12/32 bits
+						liveHiscoresXPs[1] = (long)((data.blocks[28][3] >>> 12) & 0x1F) << 31;	// 17/32 bits
+						liveHiscoresXPs[2] = (long)((data.blocks[28][3] >>> 17) & 0x1F) << 31;	// 22/32 bits
+						liveHiscoresXPs[3] = (long)((data.blocks[28][3] >>> 22) & 0x1F) << 31;	// 27/32 bits
+						liveHiscoresXPs[4] = (long)((data.blocks[28][3] >>> 27) & 0x1F) << 31;	// 32/32 bits
 						
 						for (int j = 0; j < NUM_RANKS; j++)
 						{
-							liveHiscoresXPs[j] |= data.subDataBlocks[j + 1][0] & 0x7FFFFFFF;				// 31/32 bits
-							liveHiscoresOnlineStatuses[j] = ((data.subDataBlocks[j + 1][0] >>> 31) == 0x1);	// 32/32 bits
+							int blockIdx = j + 29;
+							liveHiscoresXPs[j] |= data.blocks[blockIdx][0] & 0x7FFFFFFF;				// 31/32 bits
+							liveHiscoresOnlineStatuses[j] = ((data.blocks[blockIdx][0] >>> 31) == 0x1);	// 32/32 bits
 							
-							nameBytes[0] = (byte)(data.subDataBlocks[j + 1][1] & 0xFF);
-							nameBytes[1] = (byte)((data.subDataBlocks[j + 1][1] >>> 8) & 0xFF);
-							nameBytes[2] = (byte)((data.subDataBlocks[j + 1][1] >>> 16) & 0xFF);
-							nameBytes[3] = (byte)((data.subDataBlocks[j + 1][1] >>> 24) & 0xFF);
+							nameBytes[0] = (byte)(data.blocks[blockIdx][1] & 0xFF);
+							nameBytes[1] = (byte)((data.blocks[blockIdx][1] >>> 8) & 0xFF);
+							nameBytes[2] = (byte)((data.blocks[blockIdx][1] >>> 16) & 0xFF);
+							nameBytes[3] = (byte)((data.blocks[blockIdx][1] >>> 24) & 0xFF);
 							
-							nameBytes[4] = (byte)(data.subDataBlocks[j + 1][2] & 0xFF);
-							nameBytes[5] = (byte)((data.subDataBlocks[j + 1][2] >>> 8) & 0xFF);
-							nameBytes[6] = (byte)((data.subDataBlocks[j + 1][2] >>> 16) & 0xFF);
-							nameBytes[7] = (byte)((data.subDataBlocks[j + 1][2] >>> 24) & 0xFF);
+							nameBytes[4] = (byte)(data.blocks[blockIdx][2] & 0xFF);
+							nameBytes[5] = (byte)((data.blocks[blockIdx][2] >>> 8) & 0xFF);
+							nameBytes[6] = (byte)((data.blocks[blockIdx][2] >>> 16) & 0xFF);
+							nameBytes[7] = (byte)((data.blocks[blockIdx][2] >>> 24) & 0xFF);
 							
-							nameBytes[8] = (byte)(data.subDataBlocks[j + 1][3] & 0xFF);
-							nameBytes[9] = (byte)((data.subDataBlocks[j + 1][3] >>> 8) & 0xFF);
-							nameBytes[10] = (byte)((data.subDataBlocks[j + 1][3] >>> 16) & 0xFF);
-							nameBytes[11] = (byte)((data.subDataBlocks[j + 1][3] >>> 24) & 0xFF);
+							nameBytes[8] = (byte)(data.blocks[blockIdx][3] & 0xFF);
+							nameBytes[9] = (byte)((data.blocks[blockIdx][3] >>> 8) & 0xFF);
+							nameBytes[10] = (byte)((data.blocks[blockIdx][3] >>> 16) & 0xFF);
+							nameBytes[11] = (byte)((data.blocks[blockIdx][3] >>> 24) & 0xFF);
 							
 							liveHiscoresPlayerNames[j] = new String(nameBytes, StandardCharsets.UTF_8).trim();
 						}
@@ -702,9 +647,9 @@ public class MegaserverMod
 		int animationID = player.getAnimation();
 		if (isPoseAnimation)
 		{
-			if (currentGameTick == 0 || currentGameTick == 8)
+			if (currentChatTick == 0 || currentChatTick == 8)
 				animationID = player.getIdlePoseAnimation();
-			else if ((currentGameTick & 0x1) == 0x1)
+			else if ((currentChatTick & 0x1) == 0x1)
 				animationID = player.getWalkAnimation();
 			else
 				animationID = player.getRunAnimation();
@@ -803,7 +748,7 @@ public class MegaserverMod
 
 		if (showSelfGhost)
 		{
-			if ((prevGameTick & 0x1) == 0x1)
+			if ((prevChatTick & 0x1) == 0x1)
 			{
 				boolean modelHasChanged = false;
 				

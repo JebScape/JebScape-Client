@@ -42,9 +42,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.*;
 
 @Slf4j
-@PluginDescriptor(
-	name = "JebScape"
-)
+@PluginDescriptor(name = "JebScape")
 public class JebScapePlugin extends Plugin
 {
 	@Inject
@@ -71,7 +69,6 @@ public class JebScapePlugin extends Plugin
 	private MegaserverMod megaserverMod = new MegaserverMod();
 	private boolean useMegaserverMod = true;
 	private boolean useAccountKey = false;
-	private long gameAccountKey = 0;
 	private long chatAccountKey = 0;
 	private long accountKeySalt = 0;
 	private boolean replaceAccountKeySalt = false;
@@ -151,7 +148,6 @@ public class JebScapePlugin extends Plugin
 		}
 		
 		this.useAccountKey = false;
-		this.gameAccountKey = 0;
 		this.chatAccountKey = 0;
 		this.accountKeySalt = 0;
 		this.loginTimeout = 0;
@@ -323,7 +319,6 @@ public class JebScapePlugin extends Plugin
 				this.replaceAccountKeySalt = false;
 				if (chatAccountKey != 0)
 				{
-					configManager.setRSProfileConfiguration("JebScape", "KeyGame", gameAccountKey ^ client.getAccountHash() ^ accountKeySalt);
 					configManager.setRSProfileConfiguration("JebScape", "Key", chatAccountKey ^ client.getAccountHash() ^ accountKeySalt);
 				
 					if (accountKeySalt == 0)
@@ -409,11 +404,10 @@ public class JebScapePlugin extends Plugin
 		// don't tick anything if not logged into OSRS
 		if (useMegaserverMod && (client.getGameState() == GameState.LOGGED_IN || client.getGameState() == GameState.LOADING))
 		{
-			boolean prevGameLoginStatus = server.isGameLoggedIn();
 			boolean prevChatLoginStatus = server.isChatLoggedIn();
 			RuneScapeProfileType rsProfileType = RuneScapeProfileType.getCurrent(client);
 			
-			if (!server.isGameLoggedIn() || !server.isChatLoggedIn())
+			if (!server.isChatLoggedIn())
 			{
 				long accountHash = client.getAccountHash();
 				for (int i = 0; i < NUM_HASH_SALT_PAIRS; i++)
@@ -425,35 +419,13 @@ public class JebScapePlugin extends Plugin
 						break;
 					}
 				}
-			}
-			
-			if (!server.isGameLoggedIn())
-			{
-				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "KeyGame");
-				if (keyConfig != null)
-				{
-					Long key = Long.parseLong(keyConfig);
-					if (key != null)
-					{
-						this.gameAccountKey = accountKeySalt ^ client.getAccountHash() ^ key;
-					}
-					else
-					{
-						this.gameAccountKey = 0;
-					}
-				}
-				else
-				{
-					this.gameAccountKey = 0;
-				}
-			}
-			
-			if (!server.isChatLoggedIn())
-			{
+
 				// clear out any obsolete keys players might still have lying around
+				//configManager.unsetRSProfileConfiguration("JebScape", "KeyGame"); // TODO: uncomment this at a later date
 				configManager.unsetRSProfileConfiguration("JebScape", "JebScapeAccountKey");
 				configManager.unsetRSProfileConfiguration("JebScape", "AccountKeyGame");
 				configManager.unsetRSProfileConfiguration("JebScape", "AccountKey");
+
 				String keyConfig = configManager.getRSProfileConfiguration("JebScape", "Key");
 				if (keyConfig != null)
 				{
@@ -478,31 +450,25 @@ public class JebScapePlugin extends Plugin
 			
 			// TODO: Consider processing received data from the JebScape server at a faster pace using onClientTick()
 			server.onGameTick();
-			
-			boolean isGameLoggedIn = server.isGameLoggedIn();
-			boolean isChatLoggedIn = server.isChatLoggedIn();
-			
-			// we want to clean up if no longer logged in
-			if (!isGameLoggedIn && megaserverMod.isActive())
+
+			if (!server.isChatLoggedIn())
 			{
-				megaserverMod.stop();
-			}
-			
-			if (!isChatLoggedIn)
-			{
+				// we want to clean up if no longer logged in
+				if (megaserverMod.isActive())
+				{
+					megaserverMod.stop();
+				}
+
 				// since chat server isn't yet connected, we shouldn't be receiving any data
 				liveHiscoresOverlay.setContainsData(false);
 				
 				// whether we disconnected or just haven't started yet, this should be reset
 				megaserverMod.resetPost200mXpAccumulators();
-			}
-			
-			if (!isGameLoggedIn || !isChatLoggedIn)
-			{
+
 				if (loginTimeout <= 0)
 				{
 					// log in as a guest
-					server.login(client.getAccountHash(), gameAccountKey, chatAccountKey, useAccountKey, Text.sanitize(client.getLocalPlayer().getName()));
+					server.login(client.getAccountHash(), chatAccountKey, useAccountKey, Text.sanitize(client.getLocalPlayer().getName()));
 					loginTimeout = 4; // wait 4 ticks before attempting to log in again
 				}
 				else
@@ -511,8 +477,7 @@ public class JebScapePlugin extends Plugin
 					--loginTimeout;
 				}
 			}
-			
-			if ((isGameLoggedIn || isChatLoggedIn) && client.getAccountHash() == server.getAccountHash())
+			else if (client.getAccountHash() == server.getAccountHash())
 			{
 				int gameDataBytesSent = 0;
 				
@@ -521,34 +486,18 @@ public class JebScapePlugin extends Plugin
 					megaserverMod.start();
 				
 				gameDataBytesSent += megaserverMod.onGameTick();
-				
-				// send a chat message if we've just logged in
+
 				ChatMessageBuilder message;
-				if (isGameLoggedIn && prevGameLoginStatus == false)
+				if (server.isChatLoggedIn() && !prevChatLoginStatus)
 				{
-					if (prevGameLoginStatus == false)
-					{
-						message = new ChatMessageBuilder();
-						message.append(ChatColorType.NORMAL).append("Welcome to JebScape! There are currently " + server.getGameNumOnlinePlayers() + " players online.");
-						chatMessageManager.queue(QueuedMessage.builder()
-								.type(ChatMessageType.WELCOME)
-								.runeLiteFormattedMessage(message.build())
-								.build());
-					}
-					
-					// if we attempted to log in with a key, let's save the key the server provided back
-					if (!server.isGameGuest() && useAccountKey && this.gameAccountKey != server.getGameAccountKey())
-					{
-						this.gameAccountKey = server.getGameAccountKey();
-						if (gameAccountKey != 0)
-						{
-							configManager.setRSProfileConfiguration("JebScape", "KeyGame", gameAccountKey ^ client.getAccountHash() ^ accountKeySalt);
-						}
-					}
-				}
-				
-				if (isChatLoggedIn && prevChatLoginStatus == false)
-				{
+					// send a chat message if we've just logged in
+					message = new ChatMessageBuilder();
+					message.append(ChatColorType.NORMAL).append("Welcome to JebScape! There are currently " + server.getChatNumOnlinePlayers() + " players online.");
+					chatMessageManager.queue(QueuedMessage.builder()
+							.type(ChatMessageType.WELCOME)
+							.runeLiteFormattedMessage(message.build())
+							.build());
+
 					// the chat key is what matters the most right now, so let's prioritize it
 					boolean chatLoggedInAsGuest = server.isChatGuest();
 					if (useAccountKey)
@@ -672,7 +621,7 @@ public class JebScapePlugin extends Plugin
 				}
 				
 				Widget chatWidget = client.getWidget(ComponentID.CHATBOX_MESSAGE_LINES);
-				if (chatWidget != null && isChatLoggedIn && !server.isChatGuest())
+				if (chatWidget != null && !server.isChatGuest())
 				{
 					// TODO: Can we make this only run only when each new message is added instead of every game tick?
 					if (accountKeySalt == 0)
