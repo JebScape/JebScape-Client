@@ -53,7 +53,7 @@ public class JebScapeConnection
 	private static final int GAME_PACKET = 0x2;
 	private static final int CHAT_PACKET = 0x3;
 
-	private static final int CHAT_CLIENT_PACKET_SIZE = 128;
+	private static final int CHAT_CLIENT_PACKET_SIZE = 144;
 	private static final int CHAT_SERVER_PACKET_SIZE = 544;
 
 	private JebScapePacket chatClientPacket = new JebScapePacket();
@@ -160,24 +160,26 @@ public class JebScapeConnection
 			try
 			{
 				chatClientPacket.buffer.clear();
-				chatClientPacket.buffer.putInt(loginPacketHeader);								// 4/128 bytes
-				chatClientPacket.buffer.putLong(accountHash);									// 12/128 bytes
-				chatClientPacket.buffer.putLong(chatAccountKey);								// 20/128 bytes
-				chatClientPacket.buffer.put(nameBytes, 0, strLen);						// up to 32/128 bytes
+				chatClientPacket.buffer.putInt(loginPacketHeader);								// 4/144 bytes
+				chatClientPacket.buffer.putLong(accountHash);									// 12/144 bytes
+				chatClientPacket.buffer.putLong(chatAccountKey);								// 20/144 bytes
+				chatClientPacket.buffer.put(nameBytes, 0, strLen);						// up to 32/144 bytes
 				if (strLen < 12)
-					chatClientPacket.buffer.put(EMPTY_BYTES, 0, 12 - strLen);		// 32/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 40/129 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 48/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 56/129 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 64/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 72/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 80/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 88/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 96/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 104/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 112/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 120/128 bytes
-				chatClientPacket.buffer.putLong(reserved);										// 128/128 bytes
+					chatClientPacket.buffer.put(EMPTY_BYTES, 0, 12 - strLen);		// 32/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 40/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 48/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 56/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 64/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 72/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 80/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 88/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 96/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 104/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 112/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 120/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 128/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 136/144 bytes
+				chatClientPacket.buffer.putLong(reserved);										// 144/144 bytes
 				chatClientPacket.buffer.rewind();
 				
 				success = chatChannel.write(chatClientPacket.buffer) == CHAT_CLIENT_PACKET_SIZE;
@@ -281,16 +283,20 @@ public class JebScapeConnection
 			try
 			{
 				chatClientPacket.buffer.clear();
-				chatClientPacket.buffer.putInt(packetHeader);									// 4/128 bytes
-				chatClientPacket.buffer.putLong(accountHash);									// 12/128 bytes
-				chatClientPacket.buffer.putLong(chatAccountKey);								// 20/128 bytes
-				chatClientPacket.buffer.putInt(coreData[0]);									// 24/128 bytes
-				chatClientPacket.buffer.putInt(coreData[1]);									// 28/128 bytes
-				chatClientPacket.buffer.putInt(coreData[2]);									// 32/128 bytes
+				chatClientPacket.buffer.putInt(packetHeader);									// 4/144 bytes
+				chatClientPacket.buffer.putLong(accountHash);									// 12/144 bytes
+				chatClientPacket.buffer.putLong(chatAccountKey);								// 20/144 bytes
+				chatClientPacket.buffer.putInt(coreData[0]);									// 24/144 bytes
+				chatClientPacket.buffer.putInt(coreData[1]);									// 28/144 bytes
+				chatClientPacket.buffer.putInt(coreData[2]);									// 32/144 bytes
+				chatClientPacket.buffer.putInt(gameSubData[0]);									// 36/144 bytes
+				chatClientPacket.buffer.putInt(gameSubData[1]);									// 42/144 bytes
+				chatClientPacket.buffer.putInt(gameSubData[2]);									// 48/144 bytes
+				chatClientPacket.buffer.putInt(gameSubData[3]);									// 54/144 bytes
 				if (bytesLength > 0)
-					chatClientPacket.buffer.put(extraChatData, 0, bytesLength);			// up to 128/128 bytes
+					chatClientPacket.buffer.put(extraChatData, 0, bytesLength);			// up to 144/144 bytes
 				if (bytesLength < 96)
-					chatClientPacket.buffer.put(EMPTY_BYTES, 0, 96 - bytesLength);	// 128/128 bytes
+					chatClientPacket.buffer.put(EMPTY_BYTES, 0, 96 - bytesLength);	// 144/144 bytes
 				chatClientPacket.buffer.rewind();
 				
 				bytesWritten += chatChannel.write(chatClientPacket.buffer);
@@ -376,7 +382,7 @@ public class JebScapeConnection
 							this.isChatUsingKey = newIsUsingKey; // if we made a request to log in with a key that was denied, it may allow us in as a guest anyway
 							this.chatAccountKey = newIsUsingKey ? newKey : 0;
 							this.chatSessionID = newSessionID;
-							this.chatNumOnlinePlayers = chatServerPacket.buffer.getInt(CHAT_SERVER_PACKET_SIZE - 4); // read the last 4 bytes
+							this.chatNumOnlinePlayers = chatServerPacket.buffer.getInt((26 * JebScapeServerData.DATA_BLOCK_SIZE + 3) * 4);
 						}
 					}
 					

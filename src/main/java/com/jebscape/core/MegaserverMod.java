@@ -372,7 +372,7 @@ public class MegaserverMod
 						//*/
 					}
 
-					if (containsMegaserverCmd && playerWorld == client.getWorld())
+					if (playerWorld == client.getWorld())
 					{
 						if (isFirstPacket && showSelfGhost && prevChatTick != chatTick)
 						{
@@ -395,7 +395,7 @@ public class MegaserverMod
 							// there are 4 ghosts per data block
 							for (int j = 0; j < JebScapeServerData.DATA_BLOCK_SIZE; j++)
 							{
-								int ghostID = (packetID * 16) * (sectionID * JebScapeServerData.DATA_BLOCK_SIZE) + j;
+								int ghostID = (packetID * 16) + (sectionID * JebScapeServerData.DATA_BLOCK_SIZE) + j;
 
 								// all data outside the total range must necessarily have despawned ghosts
 								if (packetID >= numChatPacketsSent[chatTick])
@@ -512,128 +512,128 @@ public class MegaserverMod
 								}
 							}
 						}
-					}
-					
-					// contains chat messages
-					if (containsMegaserverCmd && playerWorld == client.getWorld())
-					{
-						// extract chat message
-						int ghostWorld = data.blocks[28][0];
-						
-						if (ghostWorld != 0)
+
+						if (containsMegaserverCmd) // contains chat messages (TODO: fix naming and how this command works so there's only 1 bit ever used)
 						{
-							// a chat message exists, so let's extract the rest
-							nameBytes[0] = (byte)(data.blocks[28][1] & 0xFF);
-							nameBytes[1] = (byte)((data.blocks[28][1] >>> 8) & 0xFF);
-							nameBytes[2] = (byte)((data.blocks[28][1] >>> 16) & 0xFF);
-							nameBytes[3] = (byte)((data.blocks[28][1] >>> 24) & 0xFF);
-							
-							nameBytes[4] = (byte)(data.blocks[28][2] & 0xFF);
-							nameBytes[5] = (byte)((data.blocks[28][2] >>> 8) & 0xFF);
-							nameBytes[6] = (byte)((data.blocks[28][2] >>> 16) & 0xFF);
-							nameBytes[7] = (byte)((data.blocks[28][2] >>> 24) & 0xFF);
-							
-							nameBytes[8] = (byte)(data.blocks[28][3] & 0xFF);
-							nameBytes[9] = (byte)((data.blocks[28][3] >>> 8) & 0xFF);
-							nameBytes[10] = (byte)((data.blocks[28][3] >>> 16) & 0xFF);
-							nameBytes[11] = (byte)((data.blocks[28][3] >>> 24) & 0xFF);
-							
-							String senderName = new String(nameBytes, StandardCharsets.UTF_8).trim();
-							// now let's see if we can find the corresponding ghost for this chat message
-							for (int ghostID = 0; ghostID < MAX_GHOSTS; ghostID++)
+							// extract chat message
+							int ghostWorld = data.blocks[28][0];
+
+							if (ghostWorld != 0)
 							{
-								JebScapeActor ghost = ghosts[ghostID];
-								String name = ghost.getName();
-								if (ghost.getWorld() == ghostWorld && name != null && name.contentEquals(senderName))
+								// a chat message exists, so let's extract the rest
+								nameBytes[0] = (byte)(data.blocks[28][1] & 0xFF);
+								nameBytes[1] = (byte)((data.blocks[28][1] >>> 8) & 0xFF);
+								nameBytes[2] = (byte)((data.blocks[28][1] >>> 16) & 0xFF);
+								nameBytes[3] = (byte)((data.blocks[28][1] >>> 24) & 0xFF);
+
+								nameBytes[4] = (byte)(data.blocks[28][2] & 0xFF);
+								nameBytes[5] = (byte)((data.blocks[28][2] >>> 8) & 0xFF);
+								nameBytes[6] = (byte)((data.blocks[28][2] >>> 16) & 0xFF);
+								nameBytes[7] = (byte)((data.blocks[28][2] >>> 24) & 0xFF);
+
+								nameBytes[8] = (byte)(data.blocks[28][3] & 0xFF);
+								nameBytes[9] = (byte)((data.blocks[28][3] >>> 8) & 0xFF);
+								nameBytes[10] = (byte)((data.blocks[28][3] >>> 16) & 0xFF);
+								nameBytes[11] = (byte)((data.blocks[28][3] >>> 24) & 0xFF);
+
+								String senderName = new String(nameBytes, StandardCharsets.UTF_8).trim();
+								// now let's see if we can find the corresponding ghost for this chat message
+								for (int ghostID = 0; ghostID < MAX_GHOSTS; ghostID++)
 								{
-									// we found our ghost, let's proceed
-									int index = 0;
-									for (int j = 29; j < 6; j++)
+									JebScapeActor ghost = ghosts[ghostID];
+									if (ghost.isActive())
 									{
-										for (int k = 0; k < 4; k++)
+										String name = ghost.getName();
+										if (ghost.getWorld() == ghostWorld && name != null && name.contentEquals(senderName))
 										{
-											chatBytes[index++] = (byte)(data.blocks[j][k] & 0xFF);
-											chatBytes[index++] = (byte)((data.blocks[j][k] >>> 8) & 0xFF);
-											chatBytes[index++] = (byte)((data.blocks[j][k] >>> 16) & 0xFF);
-											chatBytes[index++] = (byte)((data.blocks[j][k] >>> 24) & 0xFF);
+											// we found our ghost, let's proceed
+											int index = 0;
+											for (int j = 29; j < 34; j++)
+											{
+												for (int k = 0; k < 4; k++)
+												{
+													chatBytes[index++] = (byte)(data.blocks[j][k] & 0xFF);
+													chatBytes[index++] = (byte)((data.blocks[j][k] >>> 8) & 0xFF);
+													chatBytes[index++] = (byte)((data.blocks[j][k] >>> 16) & 0xFF);
+													chatBytes[index++] = (byte)((data.blocks[j][k] >>> 24) & 0xFF);
+												}
+											}
+
+											ghosts[ghostID].setChatMessage(new String(chatBytes, StandardCharsets.UTF_8).trim());
+											break;
 										}
 									}
-									
-									ghosts[ghostID].setChatMessage(new String(chatBytes, StandardCharsets.UTF_8).trim());
-									break;
 								}
 							}
 						}
-					}
-					
-					// contains live hiscores data
-					if (containsLiveHiscoresCmd)
-					{
-						// player coreData contains info on the current monitored player rather than oneself
-						
-						// unpack the sub data
-						// 3 bits monitoredPlayerRankOffset (ranks 0-4; all 1 bits mean none is monitored)
-						// 17 bits startingRank (the ranks we pass down are offset by this)
-						// 12 bits liveHiscoresLevels[0]
-						int monitoredPlayerRankOffset = data.blocks[28][0] & 0x7;		// 3/32 bits
-						int startRank = (data.blocks[28][0] >>> 3) & 0x1FFFF;			// 20/32 bits
-						liveHiscoresLevels[0] = (data.blocks[28][0] >>> 20) & 0xFFF;	// 32/32 bits
-						
-						// 12 bits liveHiscoresLevels[1]
-						// 12 bits liveHiscoresLevels[2]
-						// 8 bits reserved
-						liveHiscoresLevels[1] = data.blocks[28][1] & 0xFFF;				// 12/32 bits
-						liveHiscoresLevels[2] = (data.blocks[28][1] >>> 12) & 0xFFF;	// 24/32 bits
-						
-						// 12 bits liveHiscoresLevels[3]
-						// 12 bits liveHiscoresLevels[4]
-						// 8 bits reserved
-						liveHiscoresLevels[3] = data.blocks[28][2] & 0xFFF;				// 12/32 bits
-						liveHiscoresLevels[4] = (data.blocks[28][2] >>> 12) & 0xFFF;	// 24/32 bits
-						
-						// 5 bits skill type
-						// 2 bits reserved
-						// 25 bits for Overall upperXPs; 5 bits each
-						// 2 bits reserved
-						int skillType = data.blocks[28][3] & 0x5F;								// 5/32 bits
-						//int reserved = (data.subDataBlocks[0][3] >>> 5) & 0x3;				// 7/32 bits
-						liveHiscoresXPs[0] = (long)((data.blocks[28][3] >>> 7) & 0x1F) << 31;	// 12/32 bits
-						liveHiscoresXPs[1] = (long)((data.blocks[28][3] >>> 12) & 0x1F) << 31;	// 17/32 bits
-						liveHiscoresXPs[2] = (long)((data.blocks[28][3] >>> 17) & 0x1F) << 31;	// 22/32 bits
-						liveHiscoresXPs[3] = (long)((data.blocks[28][3] >>> 22) & 0x1F) << 31;	// 27/32 bits
-						liveHiscoresXPs[4] = (long)((data.blocks[28][3] >>> 27) & 0x1F) << 31;	// 32/32 bits
-						
-						for (int j = 0; j < NUM_RANKS; j++)
+						else if (containsLiveHiscoresCmd) // contains live hiscores data instead
 						{
-							int blockIdx = j + 29;
-							liveHiscoresXPs[j] |= data.blocks[blockIdx][0] & 0x7FFFFFFF;				// 31/32 bits
-							liveHiscoresOnlineStatuses[j] = ((data.blocks[blockIdx][0] >>> 31) == 0x1);	// 32/32 bits
-							
-							nameBytes[0] = (byte)(data.blocks[blockIdx][1] & 0xFF);
-							nameBytes[1] = (byte)((data.blocks[blockIdx][1] >>> 8) & 0xFF);
-							nameBytes[2] = (byte)((data.blocks[blockIdx][1] >>> 16) & 0xFF);
-							nameBytes[3] = (byte)((data.blocks[blockIdx][1] >>> 24) & 0xFF);
-							
-							nameBytes[4] = (byte)(data.blocks[blockIdx][2] & 0xFF);
-							nameBytes[5] = (byte)((data.blocks[blockIdx][2] >>> 8) & 0xFF);
-							nameBytes[6] = (byte)((data.blocks[blockIdx][2] >>> 16) & 0xFF);
-							nameBytes[7] = (byte)((data.blocks[blockIdx][2] >>> 24) & 0xFF);
-							
-							nameBytes[8] = (byte)(data.blocks[blockIdx][3] & 0xFF);
-							nameBytes[9] = (byte)((data.blocks[blockIdx][3] >>> 8) & 0xFF);
-							nameBytes[10] = (byte)((data.blocks[blockIdx][3] >>> 16) & 0xFF);
-							nameBytes[11] = (byte)((data.blocks[blockIdx][3] >>> 24) & 0xFF);
-							
-							liveHiscoresPlayerNames[j] = new String(nameBytes, StandardCharsets.UTF_8).trim();
-						}
-						
-						liveHiscoresOverlay.updateSkillHiscoresData(skillType, startRank, liveHiscoresPlayerNames, liveHiscoresLevels, liveHiscoresXPs, liveHiscoresOnlineStatuses);
-						
-						if (startRank == 1 && liveHiscoresPlayerNames[0].contentEquals(client.getLocalPlayer().getName()))
-						{
-							// if our player is rank 1 in a skill, let's update their capeID accordingly
-							// set to female max cape if rank 1 Overall is female
-							this.playerCapeID = (skillType == 0 && client.getLocalPlayer().getPlayerComposition().getGender() == 1) ? JebScapeModelLoader.femaleMaxCapeID : skillType;
+							// player coreData contains info on the current monitored player rather than oneself
+
+							// unpack the sub data
+							// 3 bits monitoredPlayerRankOffset (ranks 0-4; all 1 bits mean none is monitored)
+							// 17 bits startingRank (the ranks we pass down are offset by this)
+							// 12 bits liveHiscoresLevels[0]
+							int monitoredPlayerRankOffset = data.blocks[28][0] & 0x7;		// 3/32 bits
+							int startRank = (data.blocks[28][0] >>> 3) & 0x1FFFF;			// 20/32 bits
+							liveHiscoresLevels[0] = (data.blocks[28][0] >>> 20) & 0xFFF;	// 32/32 bits
+
+							// 12 bits liveHiscoresLevels[1]
+							// 12 bits liveHiscoresLevels[2]
+							// 8 bits reserved
+							liveHiscoresLevels[1] = data.blocks[28][1] & 0xFFF;				// 12/32 bits
+							liveHiscoresLevels[2] = (data.blocks[28][1] >>> 12) & 0xFFF;	// 24/32 bits
+
+							// 12 bits liveHiscoresLevels[3]
+							// 12 bits liveHiscoresLevels[4]
+							// 8 bits reserved
+							liveHiscoresLevels[3] = data.blocks[28][2] & 0xFFF;				// 12/32 bits
+							liveHiscoresLevels[4] = (data.blocks[28][2] >>> 12) & 0xFFF;	// 24/32 bits
+
+							// 5 bits skill type
+							// 2 bits reserved
+							// 25 bits for Overall upperXPs; 5 bits each
+							// 2 bits reserved
+							int skillType = data.blocks[28][3] & 0x5F;								// 5/32 bits
+							//int reserved = (data.subDataBlocks[0][3] >>> 5) & 0x3;				// 7/32 bits
+							liveHiscoresXPs[0] = (long)((data.blocks[28][3] >>> 7) & 0x1F) << 31;	// 12/32 bits
+							liveHiscoresXPs[1] = (long)((data.blocks[28][3] >>> 12) & 0x1F) << 31;	// 17/32 bits
+							liveHiscoresXPs[2] = (long)((data.blocks[28][3] >>> 17) & 0x1F) << 31;	// 22/32 bits
+							liveHiscoresXPs[3] = (long)((data.blocks[28][3] >>> 22) & 0x1F) << 31;	// 27/32 bits
+							liveHiscoresXPs[4] = (long)((data.blocks[28][3] >>> 27) & 0x1F) << 31;	// 32/32 bits
+
+							for (int j = 0; j < NUM_RANKS; j++)
+							{
+								int blockIdx = j + 29;
+								liveHiscoresXPs[j] |= data.blocks[blockIdx][0] & 0x7FFFFFFF;				// 31/32 bits
+								liveHiscoresOnlineStatuses[j] = ((data.blocks[blockIdx][0] >>> 31) == 0x1);	// 32/32 bits
+
+								nameBytes[0] = (byte)(data.blocks[blockIdx][1] & 0xFF);
+								nameBytes[1] = (byte)((data.blocks[blockIdx][1] >>> 8) & 0xFF);
+								nameBytes[2] = (byte)((data.blocks[blockIdx][1] >>> 16) & 0xFF);
+								nameBytes[3] = (byte)((data.blocks[blockIdx][1] >>> 24) & 0xFF);
+
+								nameBytes[4] = (byte)(data.blocks[blockIdx][2] & 0xFF);
+								nameBytes[5] = (byte)((data.blocks[blockIdx][2] >>> 8) & 0xFF);
+								nameBytes[6] = (byte)((data.blocks[blockIdx][2] >>> 16) & 0xFF);
+								nameBytes[7] = (byte)((data.blocks[blockIdx][2] >>> 24) & 0xFF);
+
+								nameBytes[8] = (byte)(data.blocks[blockIdx][3] & 0xFF);
+								nameBytes[9] = (byte)((data.blocks[blockIdx][3] >>> 8) & 0xFF);
+								nameBytes[10] = (byte)((data.blocks[blockIdx][3] >>> 16) & 0xFF);
+								nameBytes[11] = (byte)((data.blocks[blockIdx][3] >>> 24) & 0xFF);
+
+								liveHiscoresPlayerNames[j] = new String(nameBytes, StandardCharsets.UTF_8).trim();
+							}
+
+							liveHiscoresOverlay.updateSkillHiscoresData(skillType, startRank, liveHiscoresPlayerNames, liveHiscoresLevels, liveHiscoresXPs, liveHiscoresOnlineStatuses);
+
+							if (startRank == 1 && liveHiscoresPlayerNames[0].contentEquals(client.getLocalPlayer().getName()))
+							{
+								// if our player is rank 1 in a skill, let's update their capeID accordingly
+								// set to female max cape if rank 1 Overall is female
+								this.playerCapeID = (skillType == 0 && client.getLocalPlayer().getPlayerComposition().getGender() == 1) ? JebScapeModelLoader.femaleMaxCapeID : skillType;
+							}
 						}
 					}
 				}
