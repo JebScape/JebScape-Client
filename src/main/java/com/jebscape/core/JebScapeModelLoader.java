@@ -377,7 +377,7 @@ public class JebScapeModelLoader
 			18947,	// RUNECRAFT
 			19873,	// HUNTER
 			18922,	// CONSTRUCTION
-			29617,	// MAX CAPE BUCKET
+			59153,	// SAILING
 			29624	// MAX CAPE FEMALE
 	};
 	
