@@ -24,13 +24,8 @@
  */
 package com.jebscape.core;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public class RuneLiteKitLoader
 {
-	private static final Logger logger = LoggerFactory.getLogger(RuneLiteKitLoader.class);
-	
 	public RuneLiteKitDefinition load(int id, byte[] b)
 	{
 		RuneLiteKitDefinition def = new RuneLiteKitDefinition(id);
@@ -62,6 +57,16 @@ public class RuneLiteKitLoader
 			{
 				def.nonSelectable = true;
 			}
+			else if (opcode == 5)
+			{
+				int length = is.readUnsignedByte();
+				def.models = new int[length];
+
+				for (int index = 0; index < length; ++index)
+				{
+					def.models[index] = is.readInt();
+				}
+			}
 			else if (opcode == 40)
 			{
 				int length = is.readUnsignedByte();
@@ -89,6 +94,10 @@ public class RuneLiteKitLoader
 			else if (opcode >= 60 && opcode < 70)
 			{
 				def.chatheadModels[opcode - 60] = is.readUnsignedShort();
+			}
+			else if (opcode >= 70 && opcode < 80)
+			{
+				def.chatheadModels[opcode - 70] = is.readInt();
 			}
 		}
 		

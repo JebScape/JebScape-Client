@@ -25,14 +25,9 @@
 
 package com.jebscape.core;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.HashMap;
-
 public class RuneLiteItemLoader
 {
-	private static final Logger logger = LoggerFactory.getLogger(RuneLiteItemLoader.class);
+	private RuneLiteEntityOpsLoader entityOpsLoader = new RuneLiteEntityOpsLoader();
 	
 	public RuneLiteItemDefinition load(int id, byte[] b)
 	{
@@ -145,11 +140,7 @@ public class RuneLiteItemLoader
 		}
 		else if (opcode >= 30 && opcode < 35)
 		{
-			def.options[opcode - 30] = stream.readString();
-			if (def.options[opcode - 30].equalsIgnoreCase("Hidden"))
-			{
-				def.options[opcode - 30] = null;
-			}
+			this.entityOpsLoader.decodeOp(def.groundOps, stream, opcode - 30);
 		}
 		else if (opcode >= 35 && opcode < 40)
 		{
@@ -213,6 +204,52 @@ public class RuneLiteItemLoader
 					def.subops[opId][subopId] = op;
 				}
 			}
+		}
+		else if (opcode == 44)
+		{
+			def.inventoryModel = stream.readInt();
+		}
+		else if (opcode == 45)
+		{
+			def.maleModel0 = stream.readInt();
+			def.maleOffset = stream.readUnsignedByte();
+		}
+		else if (opcode == 46)
+		{
+			def.maleModel1 = stream.readInt();
+		}
+		else if (opcode == 47)
+		{
+			def.maleModel2 = stream.readInt();
+		}
+		else if (opcode == 48)
+		{
+			def.femaleModel0 = stream.readInt();
+			def.femaleOffset = stream.readUnsignedByte();
+		}
+		else if (opcode == 49)
+		{
+			def.femaleModel1 = stream.readInt();
+		}
+		else if (opcode == 50)
+		{
+			def.femaleModel2 = stream.readInt();
+		}
+		else if (opcode == 51)
+		{
+			def.maleHeadModel = stream.readInt();
+		}
+		else if (opcode == 52)
+		{
+			def.maleHeadModel2 = stream.readInt();
+		}
+		else if (opcode == 53)
+		{
+			def.femaleHeadModel = stream.readInt();
+		}
+		else if (opcode == 54)
+		{
+			def.femaleHeadModel2 = stream.readInt();
 		}
 		else if (opcode == 65)
 		{
@@ -313,34 +350,25 @@ public class RuneLiteItemLoader
 		{
 			def.placeholderTemplateId = stream.readUnsignedShort();
 		}
+		else if (opcode == 200)
+		{
+			entityOpsLoader.decodeSubOp(def.groundOps, stream);
+		}
+		else if (opcode == 201)
+		{
+			entityOpsLoader.decodeConditionalOp(def.groundOps, stream);
+		}
+		else if (opcode == 202)
+		{
+			entityOpsLoader.decodeConditionalSubOp(def.groundOps, stream);
+		}
 		else if (opcode == 249)
 		{
-			int length = stream.readUnsignedByte();
-			
-			def.params = new HashMap<>(length);
-			
-			for (int i = 0; i < length; i++)
-			{
-				boolean isString = stream.readUnsignedByte() == 1;
-				int key = stream.read24BitInt();
-				Object value;
-				
-				if (isString)
-				{
-					value = stream.readString();
-				}
-				
-				else
-				{
-					value = stream.readInt();
-				}
-				
-				def.params.put(key, value);
-			}
+			def.params = stream.readParams();
 		}
 		else
 		{
-			logger.warn("Unrecognized opcode {}", opcode);
+			//log.warn("Unrecognized opcode {}", opcode);
 		}
 	}
 	
